@@ -105,13 +105,13 @@ def calculate_image_statistics(ds, patch_isel_dict):
         dict_results[f"percentage_rainy_pixels_between_{vmin}_and_{vmax}"] = percentage
 
     # Compute reflectivity-related statistics
-    ds_patch["REFCH"] = ds_patch.gpm_api.retrieve("REFCH").compute()
-    ds_patch["echodepth18"] = ds_patch.gpm_api.retrieve("EchoDepth", threshold=18, mask_liquid_phase = True).compute()
-    ds_patch["echodepth30"] = ds_patch.gpm_api.retrieve("EchoDepth", threshold=30, mask_liquid_phase = True).compute()
-    ds_patch["echodepth50"] = ds_patch.gpm_api.retrieve("EchoDepth", threshold=50, mask_liquid_phase = True).compute()
-    ds_patch["echotopheight18"] = ds_patch.gpm_api.retrieve("EchoTopHeight", threshold=18).compute()
-    ds_patch["echotopheight30"] = ds_patch.gpm_api.retrieve("EchoTopHeight", threshold=30).compute()
-    ds_patch["echotopheight50"] = ds_patch.gpm_api.retrieve("EchoTopHeight", threshold=50).compute()
+    ds_patch["REFCH"] = ds_patch.gpm.retrieve("REFCH").compute()
+    ds_patch["echodepth18"] = ds_patch.gpm.retrieve("EchoDepth", threshold=18, mask_liquid_phase = True).compute()
+    ds_patch["echodepth30"] = ds_patch.gpm.retrieve("EchoDepth", threshold=30, mask_liquid_phase = True).compute()
+    ds_patch["echodepth50"] = ds_patch.gpm.retrieve("EchoDepth", threshold=50, mask_liquid_phase = True).compute()
+    ds_patch["echotopheight18"] = ds_patch.gpm.retrieve("EchoTopHeight", threshold=18).compute()
+    ds_patch["echotopheight30"] = ds_patch.gpm.retrieve("EchoTopHeight", threshold=30).compute()
+    ds_patch["echotopheight50"] = ds_patch.gpm.retrieve("EchoTopHeight", threshold=50).compute()
 
     # Calculate mean/std/statistics for each variable with NaN values excluded and store in the dictionary
     variables = [
