@@ -6,7 +6,7 @@ Created on Tue Mar 11 14:12:37 2025
 @author: gamal
 """
 
-import gpm
+import gpm # type: ignore
 
 username = "shadya.gamal@gmail.com"  # likely your mail
 password = "shadya.gamal@gmail.com"  # likely your mail
