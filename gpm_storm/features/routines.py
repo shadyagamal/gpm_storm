@@ -12,14 +12,14 @@ This is a temporary script file.
 """
 import os 
 import dask
-import gpm_api
+import gpm
 import numpy as np
 import pandas as pd
 import ximage  # noqa
-from gpm_api.io.local import get_time_tree, get_local_daily_filepaths
-from gpm_api.io.checks import check_date, check_time
-from gpm_api.io.info import get_start_time_from_filepaths, get_granule_from_filepaths
-from gpm_api.io.find import find_filepaths
+from gpm.io.local import get_time_tree, get_local_daily_filepaths
+from gpm.io.checks import check_date, check_time
+from gpm.io.info import get_start_time_from_filepaths, get_granule_from_filepaths
+from gpm.io.find import find_filepaths
 from gpm_storm.features.image import calculate_image_statistics
 from datetime import timedelta
 
@@ -72,7 +72,7 @@ def run_granule_feature_extraction(filepath, dst_dir, force=False):
     ]
     
     # Open granule dataset
-    ds = gpm_api.open_granule(filepath, variables=variables, scan_mode="FS")
+    ds = gpm.open_granule(filepath, variables=variables, scan_mode="FS")
     
     # Put in memory data for label definition 
     ds["precipRateNearSurface"] = ds["precipRateNearSurface"].compute()
@@ -188,7 +188,7 @@ def get_gpm_storm_patch(granule_id,
         print(f"filepath: {filepath}")
         
     # Open granule dataset
-    ds = gpm_api.open_granule(filepath, variables=variables, scan_mode=scan_mode, chunks=chunks)
+    ds = gpm.open_granule(filepath, variables=variables, scan_mode=scan_mode, chunks=chunks)
     if (slice_end - slice_start < 49):
         slice_end =slice_start + 49
     ds = ds.isel(along_track=slice(slice_start, slice_end))

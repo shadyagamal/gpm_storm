@@ -21,12 +21,12 @@ df_cleaned = df_cleaned.select_dtypes(include=[np.number])  # Keep only numerica
 
 # Standardize the data
 scaler = StandardScaler()
-scaled_data = scaler.fit_transform(df_cleaned)  # 'your_data' should be replaced with your data
+df_scaled = scaler.fit_transform(df_cleaned)  # 'your_data' should be replaced with your data
 
 # %% Step 2: PCA Calculation
 n_components = 7  # Choose the number of components you want to retain
 pca = PCA(n_components=n_components)
-principal_components = pca.fit_transform(scaled_data)
+principal_components = pca.fit_transform(df_scaled)
 
 #%% Step 3: Variance Explained
 explained_variance_ratio = pca.explained_variance_ratio_
