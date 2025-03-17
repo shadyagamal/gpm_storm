@@ -3,6 +3,7 @@ Created on Thu Dec 21 12:31:33 2023
 
 @author: ghiggi
 """
+#%%
 import somoclu
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler 
@@ -14,15 +15,15 @@ PACKAGE_DIR = os.path.abspath(os.path.join(os.getcwd(), ".."))
 if PACKAGE_DIR not in sys.path:
     sys.path.insert(0, PACKAGE_DIR)
 
-from gpm_storm.gpm_storm.som.experiments import get_experiment_info, save_som
+from gpm_storm.som.experiments import get_experiment_info, save_som
 # from gpm_storm.gpm_storm.features.dataset_analysis import filter_nan_values # TO PUT IN gpm_storm.som.preprocessing !  
 
  
 file_path = "~/gpm_storm/data/patch_statistics.parquet"
 som_dir = "~/gpm_storm/script" # TODO to change ... 
-som_name = "high_intensity_SOM" # TODO: THIS IS THE NAME IDENTIFYING THE EXPERIMENT
+som_name = "zonal_SOM" # TODO: THIS IS THE NAME IDENTIFYING THE EXPERIMENT
     
-#--------------------------------------------------------------------------------.
+#%%--------------------------------------------------------------------------------.
 # Read the Parquet file into a DataFrame
 df = pd.read_parquet(file_path)
 
