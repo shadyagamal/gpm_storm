@@ -5,7 +5,7 @@ Created on Thu Nov 16 14:29:26 2023
 
 @author: comi
 """
-
+#%% 
 import glob
 import os
 import pandas as pd 
@@ -15,13 +15,19 @@ import matplotlib.pyplot as plt
 from scipy.stats import binned_statistic_2d, shapiro, anderson
 import seaborn as sns
 from sklearn.preprocessing import MinMaxScaler
-
+import cartopy.crs as ccrs
+import gpm # type: ignore
+from gpm.visualization import plot_cartopy_background
+from pycolorbar import plot_colorbar
+#from gpm.bucket.analysis import pl_add_geographic_bins, pl_df_to_xarray
+from gpm.bucket.partitioning import LonLatPartitioning
+import datetime
+import polars as pl
 
 
 #%%
 
 def _relative_distribution_of_dataset(df):
-
     columns = df.columns
 
     # Calculate the number of rows and columns needed for the subplots
@@ -51,9 +57,9 @@ def _relative_distribution_of_dataset(df):
     plt.tight_layout()
     plt.show()
     
+
 def _relative_log_distribution_of_dataset(df):
     columns = df.columns
-
     # Calculate the number of rows and columns needed for the subplots
     num_columns = 30
     num_rows = (num_columns + 2) // 3  # Adjust the number of columns as needed
@@ -82,8 +88,9 @@ def _relative_log_distribution_of_dataset(df):
     plt.tight_layout()
     plt.show()
 
+
 def _boxplot_of_dataset(df):
-        # Get the list of column names in your DataFrame
+    # Get the list of column names in your DataFrame
     columns = df.columns
     
     # Calculate the number of rows and columns needed for the subplots
@@ -112,9 +119,8 @@ def _boxplot_of_dataset(df):
     plt.tight_layout()
     plt.show()
     
+
 def _bivariate_analysis(df, x_variable, y_variable, color_variable):
-    
-    
     df[x_variable] = pd.to_numeric(df[x_variable], errors='coerce')
     df[y_variable] = pd.to_numeric(df[y_variable], errors='coerce')
     df[color_variable] = pd.to_numeric(df[color_variable], errors='coerce')
@@ -126,8 +132,6 @@ def _bivariate_analysis(df, x_variable, y_variable, color_variable):
     
     # Handle missing values
     df.dropna(subset=[x_variable, y_variable, color_variable], inplace=True)
-
-
 
     # Set the style of seaborn
     sns.set(style="whitegrid")
@@ -146,7 +150,6 @@ def _bivariate_analysis(df, x_variable, y_variable, color_variable):
     plt.show()
     
     bins = 20
-    
     # Create a 2D histogram with mean values
     statistic, x_edges, y_edges, binnumber = binned_statistic_2d(
         x=x_values,
@@ -160,7 +163,6 @@ def _bivariate_analysis(df, x_variable, y_variable, color_variable):
     plt.figure(figsize=(10, 8))
     sns.heatmap(statistic.T, cmap='viridis', xticklabels=x_edges, cbar=True)
     
- 
     # Add labels and a title
     plt.title(f'Bivariate Analysis with Mean Values (Color Coded for {color_variable})')
     plt.xlabel(x_variable)
@@ -263,11 +265,51 @@ def spacial_analysis(df, color_variable, lat_variable="lat", lon_variable="lon")
 
     # Show the plot
     plt.show()
+    return None
 
-import cartopy.crs as ccrs
-from gpm.visualization.plot import plot_cartopy_background, plot_colorbar
-from gpm.bucket.analysis import pl_add_geographic_bins, pl_df_to_xarray
+def preliminary_dataset_analysis(dst_dir):
+    list_files = glob.glob(os.path.join(dst_dir, "*", "*", "*", "*.parquet"))
+    dataset = ds.dataset(list_files)
+    
+    table = dataset.to_table()
 
+        
+    df = table.to_pandas(types_mapper=pd.ArrowDtype)
+    
+    
+    #creating dataset without nan values
+    df_no_nan = _process_nan_values(df, threshold_percentage=1)
+    
+        
+    # Get the list of column names in your DataFrame
+    
+    _relative_distribution_of_dataset(df)
+    _boxplot_of_dataset(df)
+    _bivariate_analysis(df, 'precipitation_pixel', 'precipitation_sum', 'lat')
+    _relative_log_distribution_of_dataset(df)
+    results = _normality_tests(df_no_nan)
+    
+    #scale data
+    scaler = MinMaxScaler()
+    df_scaled = pd.DataFrame(scaler.fit_transform(df), columns=df.columns)
+
+    
+    return df, df_no_nan, df_scaled, results 
+
+
+#%%
+file_path = "~/gpm_storm/data/patch_statistics.parquet"
+
+# Read the Parquet file into a DataFrame
+df = pd.read_parquet(file_path)
+
+spacial_analysis(df, color_variable = "precipitation_average")
+
+# df_no_nan_variable = filter_nan_values(df, variable_name="aspect_ratio_largest_patch_over_{threshold}")
+
+df["lenght_track"] = df["along_track_end"] - df["along_track_start"]
+
+#%%
 df_rounded = df.copy() 
 df_rounded["lon_bin"] = df_rounded["lon"].round(1)
 df_rounded["lat_bin"] = df_rounded["lat"].round(1)
@@ -275,15 +317,15 @@ grouped_df = df_rounded.groupby(["lon_bin", "lat_bin"])
 binned_df = grouped_df.agg(["count", "median"])
 
 df.dtypes
-import polars 
-import polars as pl
 xbin_column="lon_bin"
 ybin_column="lat_bin"
 bin_spacing=0.1
 bin_spacing=2
 
 df["row-col"] = df["col"].astype(str) + "-" + df["row"].astype(str)
-df_pl = polars.from_pandas(df)
+df_pl = pl.from_pandas(df)
+
+#%%
 df_pl = pl_add_geographic_bins(df_pl, xbin_column=xbin_column, ybin_column=ybin_column, 
                                bin_spacing=bin_spacing, x_column="lon", y_column="lat")
 
@@ -323,54 +365,4 @@ fig, ax = plt.subplots(figsize=(12, 10), subplot_kw={"projection": ccrs.PlateCar
 plot_cartopy_background(ax)
 p = ds["row-col"].plot.imshow(ax=ax, x="longitude", y="latitude", cmap="Spectral", add_colorbar=False)
 plot_colorbar(p=p, ax=ax)
-
-
-
-
-def preliminary_dataset_analysis(dst_dir):
-    list_files = glob.glob(os.path.join(dst_dir, "*", "*", "*", "*.parquet"))
-    dataset = ds.dataset(list_files)
-    
-    table = dataset.to_table()
-
-        
-    df = table.to_pandas(types_mapper=pd.ArrowDtype)
-    
-    
-    #creating dataset without nan values
-    df_no_nan = _process_nan_values(df, threshold_percentage=1)
-    
-        
-    # Get the list of column names in your DataFrame
-    
-    _relative_distribution_of_dataset(df)
-    _boxplot_of_dataset(df)
-    _bivariate_analysis(df, 'precipitation_pixel', 'precipitation_sum', 'lat')
-    _relative_log_distribution_of_dataset(df)
-    results = _normality_tests(df_no_nan)
-    
-    #scale data
-    scaler = MinMaxScaler()
-    df_scaled = pd.DataFrame(scaler.fit_transform(df), columns=df.columns)
-
-    
-    return df, df_no_nan, df_scaled, results 
-
-# dst_dir = "/ltenas8/data/GPM_STORM/features_v1"
-#lit_files = preliminary_dataset_analysis(dst_dir)
-
-file_path = "~/gpm_storm/data/patch_statistics.parquet"
-
-# Read the Parquet file into a DataFrame
-df = pd.read_parquet(file_path)
-df.columns
-  
-
-spacial_analysis(df, color_variable = "precipitation_average")
-
-
-df_no_nan_variable = filter_nan_values(df, variable_name="aspect_ratio_largest_patch_over_{threshold}")
-
- 
-df["lenght_track"] = df["along_track_end"] - df["along_track_start"]
 # %%
