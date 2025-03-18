@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Dec 21 12:31:51 2023
+Load trained SOM, assign BMUs, and visualize cluster properties.
 
-@author: ghiggi
+@author: shadya
 """
+#%% 
 import os
+import sys
 import numpy as np
 import pandas as pd
 import cartopy.crs as ccrs
-from gpm.visualization.plot import plot_cartopy_background
 import matplotlib.pyplot as plt
+
+# Import local functions
+PACKAGE_DIR = os.path.abspath(os.path.join(os.getcwd(), ".."))
+if PACKAGE_DIR not in sys.path:
+    sys.path.insert(0, PACKAGE_DIR)
+
+from gpm.visualization import plot_cartopy_background # type: ignore
 from gpm_storm.som.experiments import get_experiment_info, load_som
 from gpm_storm.som.io import (
     sample_node_datasets,
@@ -25,27 +33,29 @@ from gpm_storm.som.plot import (
     plot_som_feature_statistics,
 )
 
-parallel = True 
-file_path = '/home/comi/Projects/dataframe2.parquet'
-som_dir = "/home/comi/Projects/gpm_storm/scripts/" # TODO to change ... 
-figs_dir = "/home/comi/Projects/gpm_storm/figs/"
+#%%
+# Configuration
+PARALLEL = False
+FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statistics.parquet")  
+SOM_DIR = os.path.expanduser("~/gpm_storm/script")  # Update if needed
+FIGS_DIR = os.path.expanduser("~/gpm_storm/figs")  
+SOM_NAME = "zonal_SOM"  # Change for different experiments
+VARIABLE = "precipRateNearSurface"
+NUM_IMAGES = 25
+NCOLS = 5
 
-som_name = "zonal_SOM" # TODO: THIS IS THE NAME IDENTIFYING THE EXPERIMENT
-
-variables = "precipRateNearSurface"
-
-if parallel: 
+if PARALLEL: 
     create_dask_cluster() 
     
-figs_som_dir = os.path.join(figs_dir, som_name)
+figs_som_dir = os.path.join(FIGS_DIR, SOM_NAME)
 os.makedirs(figs_som_dir, exist_ok=True)
     
-#--------------------------------------------------------------------------------.
+#%% --------------------------------------------------------------------------------.
 # Read the Parquet file into a DataFrame
-df = pd.read_parquet(file_path)
+df = pd.read_parquet(FILEPATH)
 
 # Define the features to train the SOM 
-info_dict = get_experiment_info(som_name)  # HERE INSIDE YOU DEFINE THE EXPERIMENT (features, som_settings ...)
+info_dict = get_experiment_info(SOM_NAME)  # HERE INSIDE YOU DEFINE THE EXPERIMENT (features, som_settings ...)
 features = info_dict["features"]
 n_rows, n_columns = info_dict["som_grid_size"] 
 
@@ -57,9 +67,9 @@ n_rows, n_columns = info_dict["som_grid_size"]
 df = df.dropna(subset=features) # MAYBE THIS IS ENOUGH for the moment ... but are discarding lot of stuffs... to be reported ! 
 
 # Load SOM 
-som = load_som(som_dir=som_dir, som_name=som_name)
+som = load_som(som_dir=SOM_DIR, som_name=SOM_NAME)
 
-# Get the Best Matching Units (BMUs) for each data point
+#%% Get the Best Matching Units (BMUs) for each data point
 bmus = som.bmus
 
 # Add to dataframe 
@@ -72,14 +82,14 @@ arr_df = create_som_df_array(som=som, df=df)
 
 ### Plot the SOM grid with sample images
 arr_ds = create_som_sample_ds_array(arr_df,
-                                    variables=variables,
-                                    parallel=parallel)
+                                    variables=VARIABLE,
+                                    parallel=PARALLEL)
 
 img_fpath = os.path.join(figs_som_dir, "som_grid_samples.png")
 figsize=(10, 10)
-variable = "precipRateNearSurface"
+VARIABLE = "precipRateNearSurface"
 
-fig = plot_som_array_datasets(arr_ds, figsize=figsize, variable=variable)
+fig = plot_som_array_datasets(arr_ds, figsize=figsize, variable=VARIABLE)
 fig.tight_layout()
 fig.savefig(img_fpath)
 fig.close()
@@ -99,10 +109,10 @@ for row in range(n_rows):
 
         df_node = arr_df[row, col]
         list_ds = sample_node_datasets(df_node, num_images=num_images,
-                                       variables=variable,
-                                       parallel=parallel)
+                                       variables=VARIABLE,
+                                       parallel=PARALLEL)
 
-        fig = plot_images(list_ds, ncols=ncols, figsize=figsize, variable=variable)
+        fig = plot_images(list_ds, ncols=ncols, figsize=figsize, variable=VARIABLE)
         fig.tight_layout()
         fig.savefig(img_fpath)
         plt.close(fig)  # Close the figure to release resources
