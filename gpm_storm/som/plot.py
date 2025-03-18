@@ -8,7 +8,7 @@ Created on Thu Dec 21 11:08:23 2023
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from gpm_api.utils.utils_cmap import get_colorbar_settings
+#from gpm.utils.utils_cmap import get_colorbar_settings
 
 
 def _remove_axis(ax): 
@@ -39,11 +39,12 @@ def plot_som_array_datasets(arr_ds, figsize=(10,10),
                             variable="precipRateNearSurface"):
     # Retrieve SOM grid size
     nrows, ncols = arr_ds.shape
-    # Define colormap and colorbar
-    da = arr_ds[0,0][variable]
-    plot_kwargs, cbar_kwargs = get_colorbar_settings(
-        name=da.name, plot_kwargs=plot_kwargs, cbar_kwargs=cbar_kwargs
-    )   
+    # Set default plotting parameters if not provided
+    if plot_kwargs is None:
+        plot_kwargs = {"cmap": "viridis", "interpolation": "nearest"}
+    if cbar_kwargs is None:
+        cbar_kwargs = {"shrink": 0.8, "aspect": 20}
+
     # Create figure
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
     fig.subplots_adjust(0,0,1,1, wspace=0, hspace=0)
@@ -66,11 +67,11 @@ def plot_images(list_ds, ncols=3, figsize=(15, 5), plot_kwargs={}, cbar_kwargs={
     num_rows = int(np.ceil(num_images / ncols))  # Adjust as needed
     num_cols = min(num_images, ncols)
     
-    # Define colormap and colorbar
-    da = list_ds[0][variable]
-    plot_kwargs, cbar_kwargs = get_colorbar_settings(
-        name=da.name, plot_kwargs=plot_kwargs, cbar_kwargs=cbar_kwargs
-    )   
+    # Set default plotting parameters if not provided
+    if plot_kwargs is None:
+        plot_kwargs = {"cmap": "viridis", "interpolation": "nearest"}
+    if cbar_kwargs is None:
+        cbar_kwargs = {"shrink": 0.8, "aspect": 20}
     
     # Create a subplot grid
     fig, axes = plt.subplots(num_rows, num_cols, figsize=figsize)
