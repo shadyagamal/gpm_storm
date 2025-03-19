@@ -36,7 +36,7 @@ from gpm_storm.som.plot import (
 #%%
 # Configuration
 PARALLEL = False
-FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statistics.parquet")  
+FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statistics2.parquet")  
 SOM_DIR = os.path.expanduser("~/gpm_storm/script")  # Update if needed
 FIGS_DIR = os.path.expanduser("~/gpm_storm/figs")  
 SOM_NAME = "zonal_SOM"  # Change for different experiments
@@ -79,15 +79,30 @@ df['col'] = bmus[:, 1]
 #### Define SOM nodes dataframes
 arr_df = create_som_df_array(som=som, df=df)
 
-
-### Plot the SOM grid with sample images
+VARIABLES = [
+    "sunLocalTime",
+    "airTemperature",
+    "precipRate",
+    "paramDSD",
+    "zFactorFinal",
+    "zFactorMeasured",
+    "precipRateNearSurface",
+    "precipRateESurface",
+    "precipRateESurface2",
+    "zFactorFinalESurface",
+    "zFactorFinalNearSurface",
+    "heightZeroDeg",
+    "binEchoBottom",
+    "landSurfaceType",
+]
+#%% Plot the SOM grid with sample images
 arr_ds = create_som_sample_ds_array(arr_df,
-                                    variables=VARIABLE,
+                                    variables=VARIABLES,
                                     parallel=PARALLEL)
 
 img_fpath = os.path.join(figs_som_dir, "som_grid_samples.png")
 figsize=(10, 10)
-VARIABLE = "precipRateNearSurface"
+
 
 fig = plot_som_array_datasets(arr_ds, figsize=figsize, variable=VARIABLE)
 fig.tight_layout()
@@ -95,8 +110,8 @@ fig.savefig(img_fpath)
 fig.close()
 
 
-### Plot SOM node samples 
-variable = "precipRateNearSurface"
+#%% Plot SOM node samples 
+
 num_images = 25
 ncols=5
 figsize=(15, 15)

@@ -125,7 +125,7 @@ def _get_som_nodes_queries_array(arr_df):
             # Extract SOM node dataframe 
             df_node = arr_df[row, col]
             # Select valid random index
-            index = random.randint(0, len(df_node) - 1)
+            index = random.randint(0, len(df_node) -1 )
             # Get GPM patch query info 
             dict_info = _get_sample_dict_query(df_node, index)
             # Add the dataset to the arrays

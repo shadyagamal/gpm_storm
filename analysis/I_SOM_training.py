@@ -18,7 +18,7 @@ if PACKAGE_DIR not in sys.path:
 from gpm_storm.gpm_storm.som.experiments import get_experiment_info, save_som
 # from gpm_storm.gpm_storm.features.dataset_analysis import filter_nan_values # TO PUT IN gpm_storm.som.preprocessing !  
  
-FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
+FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statistics2.parquet")  # f"feature_{granule_id}.parquet"
 SOM_DIR = os.path.expanduser("~/gpm_storm/script") # TODO to change ... 
 SOM_NAME = "zonal_SOM" # TODO: THIS IS THE NAME IDENTIFYING THE EXPERIMENT
 
