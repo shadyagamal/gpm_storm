@@ -3,8 +3,7 @@
 """
 Download GPM data, label storms, extract patches, and compute statistics.
 
-Created on Thu Mar 13 13:53:55 2025
-@author: gamal
+@author: shadya
 """
 # IMPORTS
 import sys
@@ -15,15 +14,14 @@ import numpy as np
 import pandas as pd 
 import ximage # noqa
 
-# Import local function
-PACKAGE_DIR = os.path.abspath(os.path.join(os.getcwd(), ".."))
-OUTPUT_DIR = os.path.abspath(os.path.join(os.getcwd(), "..", "data"))
-os.makedirs(OUTPUT_DIR, exist_ok=True)  # Ensure output directory exists
 
+BASE_DIR = os.path.abspath(os.path.join(os.getcwd(), ".."))
+PACKAGE_DIR = BASE_DIR
+OUTPUT_DIR = os.path.join(BASE_DIR, "data")
 if PACKAGE_DIR not in sys.path:
     sys.path.insert(0, PACKAGE_DIR)
 
-from gpm_storm.gpm_storm.features.image import calculate_image_statistics # type: ignore
+from gpm_storm.features.image import calculate_image_statistics
 
 def download_gpm_data(start_time, end_time, product="2A-DPR", product_type="RS", version=7):
     """
@@ -166,7 +164,7 @@ def main():
     patch_statistics = compute_patch_statistics(ds, label_isel_dict)
 
     # Step 6: Save results
-    output_path = os.path.join(OUTPUT_DIR, "patch_statistics2.parquet")
+    output_path = os.path.join(OUTPUT_DIR, "patch_statisticss.parquet")
     save_results(patch_statistics, output_path)
 
 
