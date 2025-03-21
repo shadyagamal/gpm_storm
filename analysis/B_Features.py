@@ -5,6 +5,7 @@ Download GPM data, label storms, extract patches, and compute statistics.
 
 @author: shadya
 """
+
 # IMPORTS
 import sys
 import os
@@ -21,7 +22,8 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "data")
 if PACKAGE_DIR not in sys.path:
     sys.path.insert(0, PACKAGE_DIR)
 
-from gpm_storm.features.image import calculate_image_statistics
+from gpm_storm.gpm_storm.features.image import calculate_image_statistics
+
 
 def download_gpm_data(start_time, end_time, product="2A-DPR", product_type="RS", version=7):
     """
@@ -40,6 +42,7 @@ def download_gpm_data(start_time, end_time, product="2A-DPR", product_type="RS",
         check_integrity=False,
     )
     print("Download complete!\n")
+    return None
  
 #If working with all of the locally downloaded files working with the granule 
 """ filepath_list = get_local_filepaths(product, version=version, product_type=product_type)
@@ -68,6 +71,7 @@ def load_gpm_data(start_time, end_time, product="2A-DPR", product_type="RS", ver
     except Exception as e:
         print(f"Error loading dataset: {e}")
         sys.exit(1)
+    return None
 
 
 def label_storms(ds):
@@ -100,7 +104,7 @@ def extract_patches(xr_obj):
         label_name="label",
         patch_size=(49, 20),
         variable="precipRateNearSurface",
-        n_patches=100,
+        n_patches=500,
         n_labels=None,
         labels_id=None,
         padding=0,
@@ -112,7 +116,7 @@ def extract_patches(xr_obj):
     return label_isel_dict
 
 
-def compute_patch_statistics(ds, label_isel_dict, n_patches=50):
+def compute_patch_statistics(ds, label_isel_dict, n_patches=500):
     """
     Compute statistics for extracted patches.
     """
@@ -142,11 +146,12 @@ def save_results(patch_statistics, output_path):
 
     df.to_parquet(output_path)
     print(f"Features saved successfully to {output_path}\n")
+    return None
 
 def main():
     # Define the time period for data download
     start_time = datetime.datetime.strptime("2023-08-20 20:00:00", "%Y-%m-%d %H:%M:%S")
-    end_time = datetime.datetime.strptime("2023-08-23 00:00:00", "%Y-%m-%d %H:%M:%S")
+    end_time = datetime.datetime.strptime("2023-08-28 00:00:00", "%Y-%m-%d %H:%M:%S")
 
     # Step 1: Download data
     download_gpm_data(start_time, end_time)
@@ -164,7 +169,10 @@ def main():
     patch_statistics = compute_patch_statistics(ds, label_isel_dict)
 
     # Step 6: Save results
-    output_path = os.path.join(OUTPUT_DIR, "patch_statisticss.parquet")
+    output_path = os.path.join(OUTPUT_DIR, "large_patch_statistics.parquet")
+    if not os.path.exists(OUTPUT_DIR):
+        print(f"Creating missing directory: {OUTPUT_DIR}")
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
     save_results(patch_statistics, output_path)
 
 

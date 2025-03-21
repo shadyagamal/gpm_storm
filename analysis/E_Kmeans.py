@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
-FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statistics.parquet") # f"feature_{granule_id}.parquet"
+FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statisticss.parquet") # f"feature_{granule_id}.parquet"
 
 def preprocess_data(df):
     """Clean and standardize the dataset for K-Means."""
@@ -67,6 +67,7 @@ def plot_clusters(data, labels, cluster_centers, n_clusters):
     plt.legend()
     plt.grid()
     plt.show()
+    return None
 
 def main():
     df = pd.read_parquet(FILEPATH)
