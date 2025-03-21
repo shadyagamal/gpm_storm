@@ -13,7 +13,7 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
+FILEPATH = os.path.expanduser("~/gpm_storm/data/large_patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
 
 
 def preprocess_data(df, nan_threshold=1):
@@ -42,7 +42,7 @@ def preprocess_data(df, nan_threshold=1):
     print(f"Data preprocessing complete! {len(columns_to_drop)} columns removed due to NaNs.\n")
     return df_scaled
 
-def perform_pca(df_scaled, variance_threshold=0.95):
+def perform_pca(df_scaled, variance_threshold=0.95, top_n=5):
     """
     Perform PCA and determine the number of components to retain.
     """
@@ -55,16 +55,27 @@ def perform_pca(df_scaled, variance_threshold=0.95):
     # Compute cumulative explained variance
     explained_variance_ratio = np.cumsum(pca.explained_variance_ratio_)
 
+    # Compute feature importance (loading magnitudes)
+    feature_importance = np.abs(pca.components_[0]) + np.abs(pca.components_[1])  # Sum of first 2 PCs
+    top_indices = np.argsort(feature_importance)[-top_n:]  # Indices of top N features
+
     # Plot first two principal components
     plt.figure(figsize=(8, 6))
-    plt.scatter(principal_components[:, 0], principal_components[:, 1], alpha=0.5)
-    for i, (x, y) in enumerate(zip(principal_components[:, 0], principal_components[:, 1])):
-        if i < 3:  # Label only a few points
-            plt.text(x, y, f"P{i}", fontsize=12, ha="right", va="bottom")
+    plt.scatter(principal_components[:, 0], principal_components[:, 1], alpha=0.5, label="Samples")
+
+    # Add only the most important feature arrows
+    loadings = pca.components_[:2, :]  # Get first two PC loadings
+    for i in top_indices:
+        plt.arrow(0, 0, loadings[0, i] * 3, loadings[1, i] * 3, alpha=0.7, head_width=0.05)
+        plt.text(loadings[0, i] * 3, loadings[1, i] * 3, df_scaled.columns[i], fontsize=10)
+
     plt.xlabel("Principal Component 1")
     plt.ylabel("Principal Component 2")
-    plt.title("PCA - First Two Principal Components")
+    plt.title(f"PCA - First Two Components (Top {top_n} Features)")
+    plt.axhline(0, color="grey", linestyle="--", linewidth=0.5)
+    plt.axvline(0, color="grey", linestyle="--", linewidth=0.5)
     plt.grid()
+    plt.legend()
     plt.show()
 
     # Plot variance explained

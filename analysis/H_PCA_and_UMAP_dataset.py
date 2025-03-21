@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Nov 20 17:14:52 2023
 
 @author: shadya
 """
@@ -13,7 +12,7 @@ from C_CorrelationMatrix import plot_correlation_matrix
 from D_PCA import preprocess_data, perform_pca
 
 
-FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
+FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statisticss.parquet")  # f"feature_{granule_id}.parquet"
 
 def perform_kmeans(df_pca, n_clusters=5):
     """
@@ -41,6 +40,7 @@ def analyze_clusters(df_scaled, df_pca):
     
     print("Cluster means computed!\n")
     print(cluster_means)
+    return None
 
 
 def display_pca_loadings(pca, df_scaled):
@@ -57,6 +57,7 @@ def display_pca_loadings(pca, df_scaled):
 
     print("PCA loadings computed!\n")
     print(loadings)
+    return None
 
 def main():
     df = pd.read_parquet(FILEPATH)

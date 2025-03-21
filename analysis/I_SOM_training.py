@@ -18,7 +18,7 @@ if PACKAGE_DIR not in sys.path:
 from gpm_storm.gpm_storm.som.experiments import get_experiment_info, save_som
 # from gpm_storm.gpm_storm.features.dataset_analysis import filter_nan_values # TO PUT IN gpm_storm.som.preprocessing !  
  
-FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statistics2.parquet")  # f"feature_{granule_id}.parquet"
+FILEPATH = os.path.expanduser("~/gpm_storm/data/large_patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
 SOM_DIR = os.path.expanduser("~/gpm_storm/script") # TODO to change ... 
 SOM_NAME = "zonal_SOM" # TODO: THIS IS THE NAME IDENTIFYING THE EXPERIMENT
 
@@ -48,7 +48,8 @@ def train_som(df_scaled, som_name):
 
     # Get experiment settings
     info_dict = get_experiment_info(som_name)  
-    n_rows, n_columns = info_dict["som_grid_size"]  
+    #n_rows, n_columns = info_dict["som_grid_size"]  
+    n_rows, n_columns = 5, 5
 
     # Convert DataFrame to NumPy array
     data = df_scaled.to_numpy()
@@ -72,6 +73,7 @@ def train_som(df_scaled, som_name):
     # Save the trained SOM
     save_som(som, som_dir=SOM_DIR, som_name=som_name)
     print("SOM training complete and model saved!\n")
+    return None
 
 def main():
     df = pd.read_parquet(FILEPATH)

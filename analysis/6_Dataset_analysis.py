@@ -298,7 +298,7 @@ def preliminary_dataset_analysis(dst_dir):
 
 
 #%%
-file_path = "~/gpm_storm/data/patch_statistics.parquet"
+file_path = "~/gpm_storm/data/patch_statistics_with_bmus.parquet"
 
 # Read the Parquet file into a DataFrame
 df = pd.read_parquet(file_path)
@@ -326,6 +326,13 @@ df["row-col"] = df["col"].astype(str) + "-" + df["row"].astype(str)
 df_pl = pl.from_pandas(df)
 
 #%%
+from gpm.bucket.partitioning import LonLatPartitioning
+
+partitioning = LonLatPartitioning(size = 0.1)
+df_rounded = partitioning.add_labels(df_rounded, x=xbin_column, y=ybin_column)
+df_rounded = partitioning.add_centroids(df_rounded, x=xbin_column, y=ybin_column)
+partitioning.to_xarray(df_rounded)
+#%%
 df_pl = pl_add_geographic_bins(df_pl, xbin_column=xbin_column, ybin_column=ybin_column, 
                                bin_spacing=bin_spacing, x_column="lon", y_column="lat")
 
@@ -336,7 +343,7 @@ df_stats_pl = grouped_df.agg(pl.col("precipitation_average").count().alias("bin_
 
 ds = pl_df_to_xarray(df_stats_pl,  
                      xbin_column=xbin_column, 
-                     ybin_column=ybin_column, 
+                     ybin_column=ybin_column,   
                      bin_spacing=bin_spacing)
 
 
