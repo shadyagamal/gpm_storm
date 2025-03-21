@@ -12,7 +12,7 @@ from C_CorrelationMatrix import plot_correlation_matrix
 from D_PCA import preprocess_data, perform_pca
 
 
-FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statisticss.parquet")  # f"feature_{granule_id}.parquet"
+FILEPATH = os.path.expanduser("~/gpm_storm/data/largest_patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
 
 def perform_kmeans(df_pca, n_clusters=5):
     """
