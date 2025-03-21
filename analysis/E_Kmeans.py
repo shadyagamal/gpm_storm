@@ -12,11 +12,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import silhouette_score
 
-FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statisticss.parquet") # f"feature_{granule_id}.parquet"
+FILEPATH = os.path.expanduser("~/gpm_storm/data/largest_patch_statistics.parquet") # f"feature_{granule_id}.parquet"
 
 def preprocess_data(df):
-    """Clean and standardize the dataset for K-Means."""
+    """
+    Clean and standardize the dataset for K-Means.
+    """
     print("Preprocessing data...")
 
     # Drop rows with missing values (change to axis=0)
@@ -32,12 +35,51 @@ def preprocess_data(df):
     print("Data preprocessing complete!\n")
     return df_scaled
 
-def perform_kmeans(data, n_clusters=3):
+
+def find_optimal_clusters(data, min_k=2, max_k=30):
+    """
+    Find the optimal number of clusters using silhouette score.
+    """
+    print("Finding the optimal number of clusters...")
+    
+    best_k = min_k
+    best_score = -1
+    silhouette_scores = []
+
+    for k in range(min_k, max_k + 1):
+        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+        labels = kmeans.fit_predict(data)
+
+        # Compute silhouette score
+        score = silhouette_score(data, labels)
+        silhouette_scores.append(score)
+
+        print(f"K={k}: Silhouette Score = {score:.4f}")
+
+        # Update best_k if the score is better
+        if score > best_score:
+            best_k = k
+            best_score = score
+
+    print(f"\nOptimal number of clusters: K={best_k} with silhouette score {best_score:.4f}\n")
+
+    # Plot silhouette scores
+    plt.figure(figsize=(8, 5))
+    plt.plot(range(min_k, max_k + 1), silhouette_scores, marker="o", linestyle="--")
+    plt.xlabel("Number of Clusters (K)")
+    plt.ylabel("Silhouette Score")
+    plt.title("Silhouette Score vs. Number of Clusters")
+    plt.grid()
+    plt.show()
+
+    return best_k
+
+def perform_kmeans(data, n_clusters):
     """
     Perform K-Means clustering and return model, labels, and cluster centers.
     """
     print(f"Performing K-Means clustering with {n_clusters} clusters...")
-    
+
     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
     kmeans.fit(data)
 
@@ -67,15 +109,19 @@ def plot_clusters(data, labels, cluster_centers, n_clusters):
     plt.legend()
     plt.grid()
     plt.show()
-    return None
 
 def main():
     df = pd.read_parquet(FILEPATH)
     df_scaled = preprocess_data(df)
-    kmeans, labels, cluster_centers = perform_kmeans(df_scaled)
+
+    # Optimize K-Means by finding the best K
+    optimal_k = find_optimal_clusters(df_scaled)
+
+    # Perform K-Means with the best K
+    kmeans, labels, cluster_centers = perform_kmeans(df_scaled, optimal_k)
 
     # Visualization
-    plot_clusters(df_scaled, labels, cluster_centers, n_clusters=3)
+    plot_clusters(df_scaled, labels, cluster_centers, optimal_k)
 
 if __name__ == "__main__":
     main()
