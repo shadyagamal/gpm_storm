@@ -22,7 +22,7 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "data")
 if PACKAGE_DIR not in sys.path:
     sys.path.insert(0, PACKAGE_DIR)
 
-from gpm_storm.gpm_storm.features.image import calculate_image_statistics
+from gpm_storm.gpm_storm.features.image import calculate_image_statistics # type: ignore
 
 
 def download_gpm_data(start_time, end_time, product="2A-DPR", product_type="RS", version=7):

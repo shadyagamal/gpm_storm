@@ -36,7 +36,7 @@ from gpm_storm.som.plot import (
 
 # CONFIGURATION
 PARALLEL = False
-FILEPATH = os.path.expanduser("~/gpm_storm/data/patch_statisticss.parquet")
+FILEPATH = os.path.expanduser("~/gpm_storm/data/largest_patch_statistics.parquet")
 SOM_DIR = os.path.expanduser("~/gpm_storm/script")  # Update if needed
 FIGS_DIR = os.path.expanduser("~/gpm_storm/figs")
 SOM_NAME = "zonal_SOM"  # Change for different experiments
@@ -78,7 +78,7 @@ def assign_bmus(df, som):
         print("✅ All row-column combinations are present!")
 
     # Save updated DataFrame with BMUs
-    new_filepath = os.path.expanduser("~/gpm_storm/data/patch_statisticss_with_bmus.parquet")
+    new_filepath = os.path.expanduser("~/gpm_storm/data/largest_patch_statisticss_with_bmus.parquet")
     df.to_parquet(new_filepath)
     print(f"Updated DataFrame saved to: {new_filepath}")
 
@@ -143,35 +143,94 @@ def plot_feature_statistics(df):
 #%%
 def main():
     """Main function to run the SOM analysis pipeline."""
-    if PARALLEL:
-        create_dask_cluster()
-
-    figs_som_dir = os.path.join(FIGS_DIR, SOM_NAME)
-    os.makedirs(figs_som_dir, exist_ok=True)
-
-    # Load and preprocess data
-    df, info_dict = load_and_preprocess_data(FILEPATH, SOM_NAME)
-    n_rows, n_columns = info_dict["som_grid_size"]
-
-    # Load trained SOM
-    som = load_som(som_dir=SOM_DIR, som_name=SOM_NAME)
-
-    # Assign BMUs
-    df, missing_combinations = assign_bmus(df, som)
-
-    # Create SOM node-based dataframes
-    arr_df = create_som_df_array(som=som, df=df)
-
-    # Plot SOM grid
-    #plot_som_grid(arr_df, figs_som_dir)
-
-    # Plot SOM node samples and maps
-    #plot_som_node_samples(arr_df, df, n_rows, n_columns, figs_som_dir)
-
-    # Plot feature statistics
-    #plot_feature_statistics(df)
 
 
 if __name__ == "__main__":
     main()
 # %%
+
+if PARALLEL:
+        create_dask_cluster()
+
+figs_som_dir = os.path.join(FIGS_DIR, SOM_NAME)
+os.makedirs(figs_som_dir, exist_ok=True)
+
+# Load and preprocess data
+df, info_dict = load_and_preprocess_data(FILEPATH, SOM_NAME)
+n_rows, n_columns = info_dict["som_grid_size"]
+
+# Load trained SOM
+som = load_som(som_dir=SOM_DIR, som_name=SOM_NAME)
+
+# Assign BMUs
+df, missing_combinations = assign_bmus(df, som)
+
+# Create SOM node-based dataframes
+arr_df = create_som_df_array(som=som, df=df)
+
+
+
+# Plot SOM grid
+#plot_som_grid(arr_df, figs_som_dir)
+
+# Plot SOM node samples and maps
+#plot_som_node_samples(arr_df, df, n_rows, n_columns, figs_som_dir)
+
+# Plot feature statistics
+#plot_feature_statistics(df)
+
+# %%
+som_shape = arr_df.shape
+arr_ds = np.empty(som_shape, dtype=object)
+# %%
+import random
+from gpm_storm.som.io import _open_sample_dataset
+
+for row in range(som_shape[0]):
+        for col in range(som_shape[1]):
+            # Extract images for each cell in the SOM
+            df_node = arr_df[row, col]
+            # Select valid random index
+            index = random.randint(0, len(df_node) - 1)
+            # Open dataset
+            ds = _open_sample_dataset(df_node, index=index, variables=VARIABLE)
+            # Add the dataset to the arrays
+            arr_ds[row, col] = ds
+#%%
+def _get_patch_image(img): 
+    max_value_position = np.unravel_index(np.argmax(img), img.shape)
+    center_y, center_x = max_value_position
+    if center_x < 25:
+        img = img[:, 0:49]
+    elif (img.shape[1] - center_x) > 25:
+        start_x = center_x - 24
+        end_x = center_x + 25
+        img = img[:, start_x:end_x]
+    else: 
+        img = img[:, -49:]
+    return img 
+def _remove_axis(ax): 
+    ax.set_title("")  # Set title to an empty string
+    ax.set_xlabel("")  # Set xlabel to an empty string
+    ax.set_ylabel("")  # Set ylabel to an empty string
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+# %%
+img_fpath = os.path.join(figs_som_dir, "som_grid_samples.png")
+nrows, ncols = arr_ds.shape
+cbar_kwargs = {"shrink": 0.8, "aspect": 20}
+plot_kwargs = {"cmap": "viridis", "interpolation": "nearest"}
+fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10,10))
+fig.subplots_adjust(0,0,1,1, wspace=0, hspace=0)
+for i in range(nrows):
+        for j in range(ncols):
+            ax = axes[i,j]
+            da = arr_ds[i,j][VARIABLE]
+            img = _get_patch_image(da.data)
+            ax.imshow(img, **plot_kwargs)
+            _remove_axis(ax)
+
+#fig = plot_som_array_datasets(arr_ds, figsize=(5, 5), variable=VARIABLE)
+#fig.tight_layout()
+#fig.savefig(img_fpath)
+#plt.close(fig)

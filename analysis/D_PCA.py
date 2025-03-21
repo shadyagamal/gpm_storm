@@ -13,10 +13,10 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-FILEPATH = os.path.expanduser("~/gpm_storm/data/large_patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
+FILEPATH = os.path.expanduser("~/gpm_storm/data/largest_patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
 
 
-def preprocess_data(df, nan_threshold=1):
+def preprocess_data(df, nan_threshold=0):
     """
     Clean and standardize the dataset for PCA.
     Assuming your data is in a 2D array or DataFrame with rows as samples and columns as variables.
@@ -104,7 +104,7 @@ def perform_pca(df_scaled, variance_threshold=0.95, top_n=5):
 def main():
     df = pd.read_parquet(FILEPATH)
     df_scaled = preprocess_data(df)
-    pca, df_pca = perform_pca(df_scaled)
+    pca, df_pca = perform_pca(df_scaled, top_n=20)
 
 if __name__ == "__main__":
     main()
