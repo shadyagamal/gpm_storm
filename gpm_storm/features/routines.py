@@ -1,28 +1,139 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Nov 15 13:28:29 2023
-
-@author: ghiggi
-"""
-"""
-Spyder Editor
-
-This is a temporary script file.
-"""
 import os 
 import dask
 import gpm
 import numpy as np
 import pandas as pd
 import ximage  # noqa
-from gpm.io.local import get_time_tree, get_local_daily_filepaths
+import xarray as xr
+from gpm.io.local import get_time_tree
 from gpm.io.checks import check_date, check_time
 from gpm.io.info import get_start_time_from_filepaths, get_granule_from_filepaths
 from gpm.io.find import find_filepaths
 from gpm_storm.features.image import calculate_image_statistics
 from datetime import timedelta
 
+
+@dask.delayed
+def create_gpm_storm_db(filepath, output_dir):
+    try:
+        with dask.config.set(scheduler="single-threaded"):
+            compute_gpm_storm_db(filepath, output_dir)
+    except Exception as e:
+        error_str = str(e)
+        msg = f"Error for {filepath}: {error_str}"
+        return msg
+    return None
+
+
+def compute_gpm_storm_db(filepath, output_dir):
+    """
+    Process a single GPM file: Extract patches, compute statistics, and save results.
+    
+    Parameters:
+    - filepath (str): Path to the GPM data file.
+    
+    Returns:
+    - None
+    """
+ 
+    # Define variables to open
+    variables = [
+        "sunLocalTime",
+        "airTemperature",
+        "precipRate",
+        # "paramDSD",
+        "zFactorFinal",
+        "zFactorMeasured",
+        "precipRateNearSurface",
+        "precipRateESurface",
+        "precipRateESurface2",
+        "zFactorFinalESurface",
+        "zFactorFinalNearSurface",
+        "heightZeroDeg",
+        "binEchoBottom",
+        "landSurfaceType",
+    ]
+
+    # Load dataset
+    ds = gpm.open_granule_dataset(filepath, 
+                                  variables=variables, 
+                                  scan_mode="FS",
+                                  chunks={})
+    
+    # Label storms
+    da = ds["precipRateNearSurface"].compute()
+    xr_obj = da.ximage.label(
+        min_value_threshold=0.05,
+        max_value_threshold=np.inf,
+        min_area_threshold=5,
+        max_area_threshold=np.inf,
+        footprint=5,
+        sort_by="area",
+        sort_decreasing=True,
+        label_name="label",
+    )
+    
+    # Extract patches
+    label_isel_dict = xr_obj.ximage.label_patches_isel_dicts(
+        label_name="label",
+        patch_size=(49, 49),
+        variable="precipRateNearSurface",
+        n_patches=300,
+        n_labels=None,
+        labels_id=None,
+        padding=0,
+        centered_on="max",
+        partitioning_method=None,
+        debug=False,
+    )
+    
+    # Compute patch statistics
+    patch_statistics = []
+    stacked_patches = []
+    
+    # isel_dict = label_isel_dict[2]
+    for isel_dict in label_isel_dict.values():
+        ds_patch = ds.isel(**isel_dict[0]).compute()
+        patch_statistics.append(calculate_image_statistics(ds_patch))
+        
+        # Stack patches along a new dimension
+        ds_patch = ds_patch.expand_dims("patch", axis=0)
+        ds_patch["SCorientation"] = ds_patch["SCorientation"].expand_dims("patch", axis=0)
+        ds_patch["dataQuality"] = ds_patch["dataQuality"].expand_dims("patch", axis=0)
+        ds_patch["lon"] = ds_patch["lon"].expand_dims("patch", axis=0)
+        ds_patch["lat"] = ds_patch["lat"].expand_dims("patch", axis=0)
+        ds_patch["gpm_along_track_id"] = ds_patch["gpm_along_track_id"].expand_dims("patch", axis=0)
+        ds_patch["height"] = ds_patch["height"].expand_dims("patch", axis=0)
+        ds_patch["time"] = ds_patch["time"].expand_dims("patch", axis=0)
+        ds_patch["gpm_id"] = ds_patch["gpm_id"].expand_dims("patch", axis=0)
+        ds_patch["gpm_granule_id"] = ds_patch["gpm_granule_id"].expand_dims("patch", axis=0)
+        
+        ds_patch = ds_patch.drop_vars(ds_patch.gpm.vertical_variables)
+        ds_patch = ds_patch.drop_vars("height")
+         
+        stacked_patches.append(ds_patch)
+    
+    # Ensure output directory exists
+    output_dir = os.path.expanduser(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # File names
+    filename = os.path.basename(filepath).replace(".HDF5", "").replace(".", "_")
+    parquet_path = os.path.join(output_dir, f"{filename}.parquet")
+    zarr_path = os.path.join(output_dir, f"{filename}.zarr")
+    
+    # Save statistics as Parquet
+    df = pd.DataFrame(patch_statistics)
+    if "time" in df.columns:
+        df["time"] = pd.to_datetime(df["time"], format="%Y-%m-%dT%H:%M:%S.%f")
+    df.to_parquet(parquet_path)
+    
+    # Save patch images as Zarr
+    if stacked_patches:
+        ds_stacked = xr.concat(stacked_patches, dim="patch")
+        ds_stacked.to_zarr(zarr_path, mode="w")
+    return None
+        
 
 
 @dask.delayed
