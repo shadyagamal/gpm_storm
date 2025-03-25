@@ -22,7 +22,7 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "data")
 if PACKAGE_DIR not in sys.path:
     sys.path.insert(0, PACKAGE_DIR)
 
-from gpm_storm.gpm_storm.features.image import calculate_image_statistics # type: ignore
+from gpm_storm.features.image import calculate_image_statistics # type: ignore
 
 
 def download_gpm_data(start_time, end_time, product="2A-DPR", product_type="RS", version=7):
@@ -63,7 +63,6 @@ def load_gpm_data(start_time, end_time, product="2A-DPR", product_type="RS", ver
             version=version,
             start_time=start_time,
             end_time=end_time,
-            variables=VARIABLES,
             prefix_group=False,
         )
         print("Dataset loaded successfully!\n")
@@ -151,7 +150,7 @@ def save_results(patch_statistics, output_path):
 def main():
     # Define the time period for data download
     start_time = datetime.datetime.strptime("2023-08-20 20:00:00", "%Y-%m-%d %H:%M:%S")
-    end_time = datetime.datetime.strptime("2023-08-28 00:00:00", "%Y-%m-%d %H:%M:%S")
+    end_time = datetime.datetime.strptime("2023-08-21 00:00:00", "%Y-%m-%d %H:%M:%S")
 
     # Step 1: Download data
     download_gpm_data(start_time, end_time)
@@ -159,40 +158,25 @@ def main():
     # Step 2: Load dataset
     ds = load_gpm_data(start_time, end_time)
 
-    # Step 3: Label storms
-    xr_obj = label_storms(ds)
+    # # Step 3: Label storms
+    # xr_obj = label_storms(ds)
 
-    # Step 4: Extract patches
-    label_isel_dict = extract_patches(xr_obj)
+    # # Step 4: Extract patches
+    # label_isel_dict = extract_patches(xr_obj)
 
-    # Step 5: Compute patch statistics
-    patch_statistics = compute_patch_statistics(ds, label_isel_dict)
+    # # Step 5: Compute patch statistics
+    # patch_statistics = compute_patch_statistics(ds, label_isel_dict)
 
-    # Step 6: Save results
-    output_path = os.path.join(OUTPUT_DIR, "large_patch_statistics.parquet")
-    if not os.path.exists(OUTPUT_DIR):
-        print(f"Creating missing directory: {OUTPUT_DIR}")
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-    save_results(patch_statistics, output_path)
+    # # Step 6: Save results
+    # output_path = os.path.join(OUTPUT_DIR, "large_patch_statistics.parquet")
+    # if not os.path.exists(OUTPUT_DIR):
+    #     print(f"Creating missing directory: {OUTPUT_DIR}")
+    #     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    # save_results(patch_statistics, output_path)
 
 
 # Global variables
-VARIABLES = [
-    "sunLocalTime",
-    "airTemperature",
-    "precipRate",
-    "paramDSD",
-    "zFactorFinal",
-    "zFactorMeasured",
-    "precipRateNearSurface",
-    "precipRateESurface",
-    "precipRateESurface2",
-    "zFactorFinalESurface",
-    "zFactorFinalNearSurface",
-    "heightZeroDeg",
-    "binEchoBottom",
-    "landSurfaceType",
-]
+
 
 if __name__ == "__main__":
     main()
