@@ -94,6 +94,7 @@ def compute_gpm_storm_db(filepath, output_dir):
     # isel_dict = label_isel_dict[2]
     for isel_dict in label_isel_dict.values():
         ds_patch = ds.isel(**isel_dict[0]).compute()
+        
         patch_statistics.append(calculate_image_statistics(ds_patch))
         
         # Stack patches along a new dimension
@@ -131,7 +132,7 @@ def compute_gpm_storm_db(filepath, output_dir):
     # Save patch images as Zarr
     if stacked_patches:
         ds_stacked = xr.concat(stacked_patches, dim="patch")
-        ds_stacked.to_zarr(zarr_path, mode="w")
+        ds_stacked.to_zarr(zarr_path, mode="w") 
     return None
         
 
