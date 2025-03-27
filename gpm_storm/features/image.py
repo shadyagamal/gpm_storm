@@ -121,7 +121,8 @@ def calculate_image_statistics(ds_patch):
     """
     Compute statistics for an extracted precipitation patch.
     """
-    ds_patch = ds_patch.compute()  
+    ds_patch = ds_patch.compute()  # compute only variables needed
+    
     precip_data = ds_patch["precipRateNearSurface"].data  
 
     # Initialize results dictionary 
@@ -132,21 +133,32 @@ def calculate_image_statistics(ds_patch):
         "P_center_count": np.nansum(precip_data[10:-10, 10:-10] > 0), # [#pixels]
         "P_sum": np.nansum(precip_data), # [mm/h]
         "P_max": np.nanmax(precip_data), # [mm/h]
+        "P_count" : np.nansum(precip_data>0), # [#pixels]
     }
 
     # Compute statistics for different precipitation thresholds
     thresholds = [0, 1, 2, 5, 10, 20, 50, 80, 120]  
     precip_masks = {t: precip_data > t for t in thresholds}
-
+    
+    # PP = precipitation patch
     for threshold, mask in precip_masks.items():
         labeled_image, count_patches = ndi_label(mask)
         stats.update({
-            f"PP_count_over_{threshold}": count_patches, # [#patches]
-            f"P_count_over_{threshold}": np.sum(mask), # [#pixels]
+            f"P_GT{threshold}_regions": 0, # [#cores]
+            f"P_GT{threshold}_count": 0, # [#pixels]
+            f"P_GT{threshold}_mean": np.nan, # [mm/hr]
+            f"P_GT{threshold}_sum": np.nan, # [mm/hr]
+            f"P_GT{threshold}_min": np.nan, # [mm/hr]
         })
+        if any(precip_data[mask]):
+            stats.update({
+                f"P_GT{threshold}_regions": count_patches, # [#cores]
+                f"P_GT{threshold}_count": np.sum(mask), # [#pixels]
+                f"P_GT{threshold}_mean": np.nanmean(precip_data[mask]), # [mm/hr]
+                f"P_GT{threshold}_sum": np.nansum(precip_data[mask]), # [mm/hr]
+                f"P_GT{threshold}_min": np.nanmin(precip_data[mask]), # [mm/hr]
+            })
 
-        if np.any(mask):
-            stats[f"P_mean_over_{threshold}"] = np.nanmean(precip_data[mask]) # [mm/h]
         # Compute aspect ratio for lower thresholds 
         # MA = major axis
         # MiA = minor axis
@@ -156,23 +168,34 @@ def calculate_image_statistics(ds_patch):
             major_axis, minor_axis, n_patch_pixels = _get_ellipse_major_minor_axis(labeled_image)
             aspect_ratio = major_axis / minor_axis if minor_axis else np.nan
             stats.update({
-                f"MA_LP_over_{threshold}": major_axis, # [#pixels]
-                f"MiA_LP_over_{threshold}": minor_axis, # [#pixels]
-                f"AR_LP_over_{threshold}": aspect_ratio, # [ratio]
-                f"P_count_in_patch_over_{threshold}": n_patch_pixels, # [#pixels]
+                f"MA_LP_GT_{threshold}": major_axis, # [#pixels]
+                f"MiA_LP_GT_{threshold}": minor_axis, # [#pixels]
+                f"AR_LP_GT_{threshold}": aspect_ratio, # [ratio]
             })
 
     # Compute percentage of precipitation in intensity ranges
-    intensity_ranges = [(0, 1), (1, 2), (2, 5), (5, 10), (10, 20)]
+    intensity_ranges = [(0, 1), (1, 2), (2, 5), (5, 10), (10, 20), (20, 300)]
     stats.update({
         f"P_%_between_{vmin}_{vmax}": _count_percentage_within_range(precip_data, vmin, vmax)
         for vmin, vmax in intensity_ranges
     })
+    
+    # Data retrieval
+    ds_patch["precip_types"] = ds_patch.gpm.retrieve("flagPrecipitationType", method="major_rain_type")
+    ds_patch["REFC"] = ds_patch.gpm.retrieve("REFC")
+    ds_patch["REFCH"] = ds_patch.gpm.retrieve("REFCH")
 
+    thresholds = [30, 40, 50]  
+    for threshold in thresholds:
+        ds_patch[f"ED{threshold}_SOLID"] = ds_patch.gpm.retrieve("EchoDepth", threshold=threshold, mask_liquid_phase=True)
+        ds_patch[f"ED{threshold}_FULL"] = ds_patch.gpm.retrieve("EchoDepth", threshold=threshold, mask_liquid_phase=False)
+        ds_patch[f"ETH{threshold}"] = ds_patch.gpm.retrieve("EchoTopHeight", threshold=threshold)
+    
     # Compute statistics for additional meteorological variables # REFCH [dbz] else [m]
-    variables = [
-        "REFCH", "echodepth18", "echodepth30", "echodepth50",
-        "echotopheight20", "echotopheight30", "echotopheight40", "echotopheight50"
+    variables = ["REFC", "REFCH",
+                 "ED30_SOLID", "ED30_FULL","ETH30",
+                 "ED40_SOLID", "ED40_FULL","ETH40", 
+                 "ED50_SOLID", "ED50_FULL","ETH50", 
     ] 
     stats.update({
         f"{var}_{stat}": val
@@ -180,52 +203,55 @@ def calculate_image_statistics(ds_patch):
         for stat, val in zip(["mean", "std", "max"], _calculate_mean_std_max_stats(ds_patch[var].data))
     })
 
-    # Compute Warm Rain (WR) ratio
+    # Compute Warm Rain (WR) fraction
     if "heightZeroDeg" in ds_patch:
         warm_rain_mask = (precip_data.sum(axis=0) > 0) & (ds_patch["heightZeroDeg"].data > 0)
-        stats["WR_:"] = np.nanmean(warm_rain_mask)
+        stats["WR_frac"] = np.nanmean(warm_rain_mask)
 
-    # Compute Virga (V) ratio
+    # Compute Virga (V) fraction
     if "flagPrecip" in ds_patch:
         virga_mask = (ds_patch["precipRateNearSurface"].data == 0) & (ds_patch["flagPrecip"].data > 0)
-        stats["V_:"] = np.nanmean(virga_mask)
+        stats["V_frac"] = np.nanmean(virga_mask)
 
-    # Compute Precipitation Type (PT) ratio
+    # Compute Precipitation Type (PT) fraction
     if "precip_types" in ds_patch:
         precip_types = ds_patch["precip_types"].data
         stats.update({
-            "PT_strat_:": np.nanmean(precip_types == 1),
-            "PT_conve_:": np.nanmean(precip_types == 2),
-            "PT_other_:": np.nanmean(precip_types == 3),
+            "PT_strat_frac": np.nanmean(precip_types == 1),
+            "PT_conve_frac": np.nanmean(precip_types == 2),
+            "PT_other_frac": np.nanmean(precip_types == 3),
         })
 
-    # Compute Land Surface Type (LST) ratio
+    # Compute Land Surface Type (LST) fraction
     if "landSurfaceType" in ds_patch:
         land_surface = ds_patch["landSurfaceType"].data
         stats.update({
-            "LST_Ocean_:": np.nanmean(land_surface == 0),
-            "LST_Land_:": np.nanmean(land_surface == 1),
-            "LST_Coast_:": np.nanmean(land_surface == 2),
-            "LST_InlandW_:": np.nanmean(land_surface == 3),
+            "Ocean_fraction": np.nanmean(land_surface == 0),
+            "Land_fraction": np.nanmean(land_surface == 1),
+            "Coast_fraction": np.nanmean(land_surface == 2),
+            "InlandW_fraction": np.nanmean(land_surface == 3),
         })
 
     # Compute Cloud Classification (CC) statistics
     for threshold in [30, 40]:
         stats.update(compute_CC_stats(ds_patch, threshold))
-
+    
+     
     # Metadata for tracking  
     center_idx = {
         "along_track": ds_patch.sizes["along_track"] // 2,
         "cross_track": ds_patch.sizes["cross_track"] // 2,
     }
     stats.update({
-        "AT_mean": np.nanmean(ds_patch["airTemperature"]), # AT = air temperature [K]
+        "Air_temp": np.nanmean(ds_patch["airTemperature"].gpm.slice_range_at_bin(ds_patch["binEchoBottom"])),
         "gpm_granule_id": int(ds_patch["gpm_granule_id"][0].data),
         "time": ds_patch["time"].isel(along_track=center_idx["along_track"]).data,
         "sunLocalTime": float(ds_patch["sunLocalTime"].isel(**center_idx).values),
         "lon": float(ds_patch["lon"].isel(**center_idx).values),
         "lat": float(ds_patch["lat"].isel(**center_idx).values),
         "flag_granule_change": int(ds_patch.along_track.values[0] == 0),
+        "gpm_id_start": ds_patch["gpm_id"].isel(along_track=0).values.item(),
+        "gpm_id_end":  ds_patch["gpm_id"].isel(along_track=-1).values.item(),
     })
 
     return stats
