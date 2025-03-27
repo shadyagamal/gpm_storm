@@ -61,19 +61,6 @@ def compute_gpm_storm_db(filepath, output_dir):
                                   variables=variables, 
                                   scan_mode="FS",
                                   chunks={})
-    # Data retrieval
-    ds["precip_types"] = ds.gpm.retrieve("flagPrecipitationType", method="major_rain_type")
-    ds["REFC"] = ds.gpm.retrieve("REFC")
-    ds["REFCH"] = ds.gpm.retrieve("REFCH")
-
-
-    thresholds = [18, 30, 50]  
-    for threshold in thresholds:
-        ds[f"echodepth{threshold}"] = ds.gpm.retrieve("EchoDepth", threshold=threshold, mask_liquid_phase=True)
-
-    thresholds = [20, 30, 40, 50]
-    for threshold in thresholds:
-        ds[f"echotopheight{threshold}"] = ds.gpm.retrieve("EchoTopHeight", threshold=threshold)
     
     # Label storms
     da = ds["precipRateNearSurface"].compute()
@@ -107,27 +94,22 @@ def compute_gpm_storm_db(filepath, output_dir):
     stacked_patches = []
     
     granule_id = ds["gpm_granule_id"].data[0].item()
-    first_gpm_id = ds["gpm_id"].isel(along_track=0).values.item()
-    last_gpm_id = ds["gpm_id"].isel(along_track=-1).values.item()
+    gpm_id_start = ds["gpm_id"].isel(along_track=0).values.item()
+    gpm_id_end = ds["gpm_id"].isel(along_track=-1).values.item()
     first_time = ds["time"].isel(along_track=0).values
     last_time = ds["time"].isel(along_track=-1).values
     
-    # isel_dict = label_isel_dict[2]
-    for isel_dict in label_isel_dict.values():
+    for patch_id, isel_dict in label_isel_dict.items():
         ds_patch = ds.isel(**isel_dict[0]).compute()
         
-        patch_statistics.append(calculate_image_statistics(ds_patch))
-        
+        stats = calculate_image_statistics(ds_patch)
+        stats["patch_id"] = patch_id-1
+        patch_statistics.append(stats)
+            
         # Stack patches along a new dimension
         ds_patch = ds_patch.expand_dims("patch", axis=0)
         for var in ["SCorientation", "dataQuality", "lon", "lat", "gpm_along_track_id", "height", "time", "gpm_id", "gpm_granule_id"]:
             ds_patch[var] = ds_patch[var].expand_dims("patch", axis=0)
-            
-        # ds_patch["gpm_granule_id"] = xr.DataArray(granule_id, dims="patch")
-        # ds_patch["first_gpm_id"] = xr.DataArray(first_gpm_id, dims="patch")
-        # ds_patch["last_gpm_id"] = xr.DataArray(last_gpm_id, dims="patch")
-        # ds_patch["first_time"] = xr.DataArray(first_time, dims="patch")
-        # ds_patch["last_time"] = xr.DataArray(last_time, dims="patch")
         
         ds_patch = ds_patch.drop_vars(ds_patch.gpm.vertical_variables)
         ds_patch = ds_patch.drop_vars("height")
@@ -138,14 +120,16 @@ def compute_gpm_storm_db(filepath, output_dir):
     output_dir = os.path.expanduser(output_dir)
     os.makedirs(output_dir, exist_ok=True)
     
-    relative_path = os.path.join(*filepath.split(os.sep)[-4:-1])
-    save_dir = os.path.join(output_dir, relative_path)
-    os.makedirs(save_dir, exist_ok=True)
+    relative_path = os.path.join(*filepath.split(os.sep)[-4:-2])
+    parquet_save_dir = os.path.join(output_dir,"parquet/", relative_path)
+    os.makedirs(parquet_save_dir, exist_ok=True)
+    zarr_save_dir = os.path.join(output_dir,"zarr/", relative_path)
+    os.makedirs(zarr_save_dir, exist_ok=True)
 
     # File names
     filename = os.path.basename(filepath).replace(".HDF5", "").replace(".", "_")
-    parquet_path = os.path.join(save_dir, f"{filename}.parquet")
-    zarr_path = os.path.join(save_dir, f"{filename}.zarr")
+    parquet_path = os.path.join(parquet_save_dir, f"{filename}.parquet")
+    zarr_path = os.path.join(zarr_save_dir, f"{filename}.zarr")
     
     # Save statistics as Parquet
     df = pd.DataFrame(patch_statistics)
@@ -158,8 +142,8 @@ def compute_gpm_storm_db(filepath, output_dir):
         ds_stacked = xr.concat(stacked_patches, dim="patch")
         
         ds_stacked["gpm_granule_id"] = granule_id
-        ds_stacked.attrs["first_gpm_id"] = first_gpm_id
-        ds_stacked.attrs["last_gpm_id"] = last_gpm_id
+        ds_stacked.attrs["gpm_id_start"] = gpm_id_start
+        ds_stacked.attrs["gpm_id_end"] = gpm_id_end
         ds_stacked.attrs["first_time"] = first_time
         ds_stacked.attrs["last_time"] = last_time
         ds_stacked.to_zarr(zarr_path, mode="w") 
