@@ -100,20 +100,23 @@ def compute_gpm_storm_db(filepath, output_dir):
     last_time = ds["time"].isel(along_track=-1).values
     
     for patch_id, isel_dict in label_isel_dict.items():
-        ds_patch = ds.isel(**isel_dict[0]).compute()
+        ds_patch = ds.isel(**isel_dict[0]).compute()  
+        da_label = xr_obj["label"].isel(**isel_dict[0]) 
         
-        stats = calculate_image_statistics(ds_patch)
+        stats = calculate_image_statistics(ds_patch, da_label)
         stats["patch_id"] = patch_id-1
         patch_statistics.append(stats)
-            
+        
         # Stack patches along a new dimension
         ds_patch = ds_patch.expand_dims("patch", axis=0)
         for var in ["SCorientation", "dataQuality", "lon", "lat", "gpm_along_track_id", "height", "time", "gpm_id", "gpm_granule_id"]:
             ds_patch[var] = ds_patch[var].expand_dims("patch", axis=0)
         
+        #ds_patch["label_image"] = da_label.expand_dims("patch", axis=0)
+        ds_patch["label_image"] = da_label.expand_dims("patch", axis=0)
         ds_patch = ds_patch.drop_vars(ds_patch.gpm.vertical_variables)
         ds_patch = ds_patch.drop_vars("height")
-         
+
         stacked_patches.append(ds_patch)
     
     # Ensure output directory exists
@@ -140,7 +143,6 @@ def compute_gpm_storm_db(filepath, output_dir):
     # Save patch images as Zarr
     if stacked_patches:
         ds_stacked = xr.concat(stacked_patches, dim="patch")
-        
         ds_stacked["gpm_granule_id"] = granule_id
         ds_stacked.attrs["gpm_id_start"] = gpm_id_start
         ds_stacked.attrs["gpm_id_end"] = gpm_id_end
@@ -150,7 +152,6 @@ def compute_gpm_storm_db(filepath, output_dir):
 
     return None
         
-
 
 @dask.delayed
 def run_feature_extraction(filepath, dst_dir, force):
