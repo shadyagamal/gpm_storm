@@ -117,30 +117,44 @@ def compute_CC_stats(ds_patch, threshold):
     return stats 
 
 
-def calculate_image_statistics(ds_patch):  
+def calculate_image_statistics(ds_patch, da_label):  
     """
     Compute statistics for an extracted precipitation patch.
     """
     ds_patch = ds_patch.compute()  # compute only variables needed
-    
     precip_data = ds_patch["precipRateNearSurface"].data  
+    
+    main_patch_mask = ~np.isnan(da_label.values)
+    main_patch_precip = precip_data[main_patch_mask]
 
     # Initialize results dictionary 
     # P = precipitation pixel
-    stats = {
-        "P_mean": np.nanmean(precip_data), # [mm/h]
-        "P_std": np.nanstd(precip_data), # [mm/h]
-        "P_center_count": np.nansum(precip_data[10:-10, 10:-10] > 0), # [#pixels]
-        "P_sum": np.nansum(precip_data), # [mm/h]
-        "P_max": np.nanmax(precip_data), # [mm/h]
-        "P_count" : np.nansum(precip_data>0), # [#pixels]
+    # MP = main patch
+    stats = { 
+        "P_mean": np.nan, 
+        "P_std": np.nan, 
+        "P_center_count": 0, 
+        "P_sum": np.nan,
+        "P_max": np.nan, 
+        "P_count": 0,
+        "MP_sum": np.nansum(main_patch_precip),
+        "MP_contrib": np.nansum(main_patch_precip)/np.nansum(precip_data),
     }
+
+    # Compute global precipitation statistics
+    if np.any(~np.isnan(precip_data)):
+        stats.update({
+            "P_mean": np.nanmean(precip_data), # [mm/h]
+            "P_std": np.nanstd(precip_data), # [mm/h]
+            "P_center_count": np.nansum(precip_data[10:-10, 10:-10] > 0), # [#pixels]
+            "P_sum": np.nansum(precip_data), # [mm/h]
+            "P_max": np.nanmax(precip_data), # [mm/h]
+            "P_count" : np.nansum(precip_data>0), # [#pixels]
+        })
 
     # Compute statistics for different precipitation thresholds
     thresholds = [0, 1, 2, 5, 10, 20, 50, 80, 120]  
     precip_masks = {t: precip_data > t for t in thresholds}
-    
-    # PP = precipitation patch
     for threshold, mask in precip_masks.items():
         labeled_image, count_patches = ndi_label(mask)
         stats.update({
@@ -158,7 +172,6 @@ def calculate_image_statistics(ds_patch):
                 f"P_GT{threshold}_sum": np.nansum(precip_data[mask]), # [mm/hr]
                 f"P_GT{threshold}_min": np.nanmin(precip_data[mask]), # [mm/hr]
             })
-
         # Compute aspect ratio for lower thresholds 
         # MA = major axis
         # MiA = minor axis
@@ -192,27 +205,39 @@ def calculate_image_statistics(ds_patch):
         ds_patch[f"ETH{threshold}"] = ds_patch.gpm.retrieve("EchoTopHeight", threshold=threshold)
     
     # Compute statistics for additional meteorological variables # REFCH [dbz] else [m]
-    variables = ["REFC", "REFCH",
+    additional_vars = ["REFC", "REFCH",
                  "ED30_SOLID", "ED30_FULL","ETH30",
                  "ED40_SOLID", "ED40_FULL","ETH40", 
-                 "ED50_SOLID", "ED50_FULL","ETH50", 
-    ] 
+                 "ED50_SOLID", "ED50_FULL","ETH50", ] 
+    
+    for var in additional_vars:
+        if var not in ds_patch:
+            ds_patch[var] = np.nan
     stats.update({
         f"{var}_{stat}": val
-        for var in variables if var in ds_patch
+        for var in additional_vars if var in ds_patch
         for stat, val in zip(["mean", "std", "max"], _calculate_mean_std_max_stats(ds_patch[var].data))
     })
 
     # Compute Warm Rain (WR) fraction
-    if "heightZeroDeg" in ds_patch:
-        warm_rain_mask = (precip_data.sum(axis=0) > 0) & (ds_patch["heightZeroDeg"].data > 0)
-        stats["WR_frac"] = np.nanmean(warm_rain_mask)
+    stats["WR_frac"] = np.nan if ds_patch["heightZeroDeg"] is None else np.nanmean(
+        (precip_data.sum(axis=0) > 0) & (ds_patch["heightZeroDeg"].data > 0)
+    )
 
     # Compute Virga (V) fraction
-    if "flagPrecip" in ds_patch:
-        virga_mask = (ds_patch["precipRateNearSurface"].data == 0) & (ds_patch["flagPrecip"].data > 0)
-        stats["V_frac"] = np.nanmean(virga_mask)
+    stats["V_frac"] = np.nan if ds_patch["flagPrecip"] is None else np.nanmean(
+        (precip_data == 0) & (ds_patch["flagPrecip"].data > 0)
+    )
 
+    stats.update({
+        "PT_strat_frac": np.nan,
+        "PT_conve_frac": np.nan,
+        "PT_other_frac": np.nan,
+        "Ocean_fraction": np.nan,
+        "Land_fraction": np.nan,
+        "Coast_fraction": np.nan,
+        "InlandW_fraction": np.nan,
+    })
     # Compute Precipitation Type (PT) fraction
     if "precip_types" in ds_patch:
         precip_types = ds_patch["precip_types"].data
@@ -231,27 +256,27 @@ def calculate_image_statistics(ds_patch):
             "Coast_fraction": np.nanmean(land_surface == 2),
             "InlandW_fraction": np.nanmean(land_surface == 3),
         })
-
+ 
+    
     # Compute Cloud Classification (CC) statistics
     for threshold in [30, 40]:
         stats.update(compute_CC_stats(ds_patch, threshold))
-    
      
     # Metadata for tracking  
     center_idx = {
-        "along_track": ds_patch.sizes["along_track"] // 2,
-        "cross_track": ds_patch.sizes["cross_track"] // 2,
-    }
+       "along_track": ds_patch.sizes["along_track"] // 2,
+       "cross_track": ds_patch.sizes["cross_track"] // 2,
+   }
     stats.update({
-        "Air_temp": np.nanmean(ds_patch["airTemperature"].gpm.slice_range_at_bin(ds_patch["binEchoBottom"])),
-        "gpm_granule_id": int(ds_patch["gpm_granule_id"][0].data),
-        "time": ds_patch["time"].isel(along_track=center_idx["along_track"]).data,
-        "sunLocalTime": float(ds_patch["sunLocalTime"].isel(**center_idx).values),
-        "lon": float(ds_patch["lon"].isel(**center_idx).values),
-        "lat": float(ds_patch["lat"].isel(**center_idx).values),
-        "flag_granule_change": int(ds_patch.along_track.values[0] == 0),
-        "gpm_id_start": ds_patch["gpm_id"].isel(along_track=0).values.item(),
-        "gpm_id_end":  ds_patch["gpm_id"].isel(along_track=-1).values.item(),
+       "Air_temp": np.nanmean(ds_patch["airTemperature"].gpm.slice_range_at_bin(ds_patch["binEchoBottom"])),
+       "gpm_granule_id": int(ds_patch["gpm_granule_id"][0].data),
+       "time": ds_patch["time"].isel(along_track=center_idx["along_track"]).data,
+       "sunLocalTime": float(ds_patch["sunLocalTime"].isel(**center_idx).values),
+       "lon": float(ds_patch["lon"].isel(**center_idx).values),
+       "lat": float(ds_patch["lat"].isel(**center_idx).values),
+       "flag_granule_change": int(ds_patch.along_track.values[0] == 0),
+       "gpm_id_start": ds_patch["gpm_id"].isel(along_track=0).values.item(),
+       "gpm_id_end":  ds_patch["gpm_id"].isel(along_track=-1).values.item(),
     })
 
     return stats
