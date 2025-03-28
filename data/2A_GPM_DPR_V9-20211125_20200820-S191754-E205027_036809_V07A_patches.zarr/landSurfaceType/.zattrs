@@ -1,0 +1,24 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "patch",
+        "cross_track",
+        "along_track"
+    ],
+    "coordinates": "lat lon",
+    "description": "Land Surface Type",
+    "flag_meanings": [
+        "Ocean",
+        "Land",
+        "Coast",
+        "Inland Water"
+    ],
+    "flag_values": [
+        0,
+        1,
+        2,
+        3
+    ],
+    "gpm_api_decoded": "yes",
+    "gpm_api_product": "2A-DPR",
+    "grid_mapping": "crsWGS84"
+}

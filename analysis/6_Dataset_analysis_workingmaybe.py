@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Perform spatial analysis and partitioning of storm data.
 
 @author: shadya
 """
 
-#%% Imports
+# %% Imports
 import os
-import numpy as np
-import pandas as pd
-import polars as pl
-import matplotlib.pyplot as plt
+
 import cartopy.crs as ccrs
-
+import matplotlib.pyplot as plt
+import pandas as pd
 from gpm.bucket.partitioning import LonLatPartitioning
-from gpm.visualization import plot_cartopy_background, plot_colorbar # type: ignore
+from gpm.visualization import plot_cartopy_background, plot_colorbar  # type: ignore
 
-#%% Configuration
+# %% Configuration
 FILE_PATH = os.path.expanduser("~/gpm_storm/data/patch_statistics_with_bmus.parquet")
 OUTPUT_XARRAY = os.path.expanduser("~/gpm_storm/data/partitioned_data.nc")
 BIN_SIZE = 0.1  # Size for geographic partitioning
@@ -27,7 +24,7 @@ FIGS_DIR = os.path.expanduser("~/gpm_storm/figs")
 os.makedirs(FIGS_DIR, exist_ok=True)
 
 
-#%% Functions
+# %% Functions
 def load_data(filepath):
     """Load parquet file into a Pandas DataFrame."""
     print(f"Loading data from: {filepath}")
@@ -48,7 +45,7 @@ def apply_spatial_partitioning(df, bin_size=0.1):
     df = partitioning.add_centroids(df, x="lon", y="lat")
     ds = partitioning.to_xarray(df)
     print("✅ Spatial partitioning applied.")
-    
+
     # Save as NetCDF for further analysis
     ds.to_netcdf(OUTPUT_XARRAY)
     print(f"✅ Saved partitioned data as NetCDF: {OUTPUT_XARRAY}")
@@ -89,7 +86,7 @@ def visualize_spatial_data(df):
     print("✅ Saved spatial visualizations.")
 
 
-#%% Main Execution
+# %% Main Execution
 def main():
     """Main function to run the spatial analysis."""
     df = load_data(FILE_PATH)

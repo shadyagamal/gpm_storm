@@ -1,0 +1,8 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "along_track",
+        "radar_frequency"
+    ],
+    "gpm_api_product": "2A-DPR",
+    "source_dtype": "int8"
+}

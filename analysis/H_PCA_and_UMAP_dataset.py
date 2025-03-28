@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 
 @author: shadya
 """
 
 import os
-import pandas as pd 
-from sklearn.cluster import KMeans
-from C_CorrelationMatrix import plot_correlation_matrix
-from D_PCA import preprocess_data, perform_pca
 
+import pandas as pd
+from C_CorrelationMatrix import plot_correlation_matrix
+from D_PCA import perform_pca, preprocess_data
+from sklearn.cluster import KMeans
 
 FILEPATH = os.path.expanduser("~/gpm_storm/data/largest_patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
+
 
 def perform_kmeans(df_pca, n_clusters=5):
     """
@@ -26,6 +26,7 @@ def perform_kmeans(df_pca, n_clusters=5):
     print("K-Means clustering complete!\n")
     return kmeans, df_pca
 
+
 def analyze_clusters(df_scaled, df_pca):
     """
     Analyze clusters and compute mean values per cluster.
@@ -37,10 +38,9 @@ def analyze_clusters(df_scaled, df_pca):
 
     # Calculate mean values for each cluster
     cluster_means = df_with_clusters.groupby("Cluster").mean()
-    
+
     print("Cluster means computed!\n")
     print(cluster_means)
-    return None
 
 
 def display_pca_loadings(pca, df_scaled):
@@ -52,12 +52,12 @@ def display_pca_loadings(pca, df_scaled):
     loadings = pd.DataFrame(
         pca.components_.T,
         columns=[f"PC{i}" for i in range(1, pca.n_components_ + 1)],
-        index=df_scaled.columns
+        index=df_scaled.columns,
     )
 
     print("PCA loadings computed!\n")
     print(loadings)
-    return None
+
 
 def main():
     df = pd.read_parquet(FILEPATH)
@@ -65,7 +65,7 @@ def main():
 
     # Perform PCA
     pca, df_pca = perform_pca(df_scaled, variance_threshold=0.95)
-    
+
     # Visualize PCA correlation
     plot_correlation_matrix(df_pca)
 
@@ -77,6 +77,7 @@ def main():
 
     # Display PCA loadings
     display_pca_loadings(pca, df_scaled)
+
 
 if __name__ == "__main__":
     main()

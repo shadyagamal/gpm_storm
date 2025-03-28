@@ -1,0 +1,8 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "along_track"
+    ],
+    "gpm_api_product": "2A-DPR",
+    "source_dtype": "int16",
+    "units": "degrees"
+}

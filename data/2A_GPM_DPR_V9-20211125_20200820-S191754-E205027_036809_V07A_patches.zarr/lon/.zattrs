@@ -1,0 +1,15 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "patch",
+        "cross_track",
+        "along_track"
+    ],
+    "comment": "Geographical coordinates, WGS84 datum",
+    "coverage_content_type": "coordinate",
+    "long_name": "longitude",
+    "name": "longitude",
+    "standard_name": "longitude",
+    "units": "degrees_east",
+    "valid_max": 180.0,
+    "valid_min": -180.0
+}
