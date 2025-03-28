@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Created on Thu Dec 21 11:04:07 2023
 
@@ -12,6 +11,7 @@ import subprocess
 import tempfile
 
 import numpy as np
+
 
 def check_input_files(image_filepaths):
     """Check valid input file paths."""
@@ -44,8 +44,7 @@ def check_frame_settings(frame_duration, frame_rate, return_duration=False):
         frame_duration = int(1000 / frame_rate)
     if return_duration:
         return frame_duration
-    else:
-        return frame_rate
+    return frame_rate
 
 
 def _move_and_rename_image_to_tmp_dir(filepaths, tmp_dir=None, delete_inputs=False):

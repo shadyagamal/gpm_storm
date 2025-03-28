@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Download GPM data, label storms, extract patches, and compute statistics.
 
@@ -7,14 +6,14 @@ Download GPM data, label storms, extract patches, and compute statistics.
 """
 
 # IMPORTS
-import sys
-import os
 import datetime
-import gpm # type: ignore
-import numpy as np 
-import pandas as pd 
-import ximage # noqa
+import os
+import sys
 
+import gpm  # type: ignore
+import numpy as np
+import pandas as pd
+import ximage  # noqa
 
 BASE_DIR = os.path.abspath(os.path.join(os.getcwd(), ".."))
 PACKAGE_DIR = BASE_DIR
@@ -22,7 +21,7 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "data")
 if PACKAGE_DIR not in sys.path:
     sys.path.insert(0, PACKAGE_DIR)
 
-from gpm_storm.features.image import calculate_image_statistics # type: ignore
+from gpm_storm.features.image import calculate_image_statistics  # type: ignore
 
 
 def download_gpm_data(start_time, end_time, product="2A-DPR", product_type="RS", version=7):
@@ -42,14 +41,15 @@ def download_gpm_data(start_time, end_time, product="2A-DPR", product_type="RS",
         check_integrity=False,
     )
     print("Download complete!\n")
-    return None
- 
-#If working with all of the locally downloaded files working with the granule 
+
+
+# If working with all of the locally downloaded files working with the granule
 """ filepath_list = get_local_filepaths(product, version=version, product_type=product_type)
 filepath_2023 = [fp for fp in filepath_list if "/2023/" in fp]
 
 for filepath in filepath_2023:
     ds = gpm.open_granule(filepath, variables=variables, scan_mode="FS") """
+
 
 def load_gpm_data(start_time, end_time, product="2A-DPR", product_type="RS", version=7):
     """
@@ -125,9 +125,7 @@ def compute_patch_statistics(ds, label_isel_dict, n_patches=500):
     ds["precipRateNearSurface"] = ds["precipRateNearSurface"].compute()
     ds["sunLocalTime"] = ds["sunLocalTime"].compute()
 
-    patch_statistics = [
-        calculate_image_statistics(ds, label_isel_dict[i][0]) for i in range(1, n_patches)
-    ]
+    patch_statistics = [calculate_image_statistics(ds, label_isel_dict[i][0]) for i in range(1, n_patches)]
 
     print("Patch statistics computed!\n")
     return patch_statistics
@@ -145,7 +143,7 @@ def save_results(patch_statistics, output_path):
 
     df.to_parquet(output_path)
     print(f"Features saved successfully to {output_path}\n")
-    return None
+
 
 def main():
     # Define the time period for data download

@@ -1,17 +1,18 @@
-import os 
+import os
+from datetime import timedelta
+
 import dask
 import gpm
 import numpy as np
 import pandas as pd
-import ximage  # noqa
 import xarray as xr
-from gpm.io.local import get_time_tree
+import ximage  # noqa
 from gpm.io.checks import check_date, check_time
-from gpm.io.info import get_start_time_from_filepaths, get_granule_from_filepaths
 from gpm.io.find import find_filepaths
-from gpm_storm.gpm_storm.features.image import calculate_image_statistics
-from datetime import timedelta
+from gpm.io.info import get_granule_from_filepaths, get_start_time_from_filepaths
+from gpm.io.local import get_time_tree
 
+from gpm_storm.features.image import calculate_image_statistics
 
 
 @dask.delayed
@@ -29,14 +30,15 @@ def create_gpm_storm_db(filepath, output_dir):
 def compute_gpm_storm_db(filepath, output_dir):
     """
     Process a single GPM file: Extract patches, compute statistics, and save results.
-    
-    Parameters:
+
+    Parameters
+    ----------
     - filepath (str): Path to the GPM data file.
-    
-    Returns:
+
+    Returns
+    -------
     - None
     """
- 
     # Define variables to open
     variables = [
         "sunLocalTime",
@@ -52,16 +54,13 @@ def compute_gpm_storm_db(filepath, output_dir):
         "heightZeroDeg",
         "binEchoBottom",
         "landSurfaceType",
-        "flagPrecip", 
-        "typePrecip"
+        "flagPrecip",
+        "typePrecip",
     ]
 
     # Load dataset
-    ds = gpm.open_granule_dataset(filepath, 
-                                  variables=variables, 
-                                  scan_mode="FS",
-                                  chunks={})
-    
+    ds = gpm.open_granule_dataset(filepath, variables=variables, scan_mode="FS", chunks={})
+
     # Label storms
     da = ds["precipRateNearSurface"].compute()
     xr_obj = da.ximage.label(
@@ -74,7 +73,7 @@ def compute_gpm_storm_db(filepath, output_dir):
         sort_decreasing=True,
         label_name="label",
     )
-    
+
     # Extract patches
     label_isel_dict = xr_obj.ximage.label_patches_isel_dicts(
         label_name="label",
@@ -88,58 +87,68 @@ def compute_gpm_storm_db(filepath, output_dir):
         partitioning_method=None,
         debug=False,
     )
-    
+
     # Compute patch statistics
     patch_statistics = []
     stacked_patches = []
-    
+
     granule_id = ds["gpm_granule_id"].data[0].item()
     gpm_id_start = ds["gpm_id"].isel(along_track=0).values.item()
     gpm_id_end = ds["gpm_id"].isel(along_track=-1).values.item()
     first_time = ds["time"].isel(along_track=0).values
     last_time = ds["time"].isel(along_track=-1).values
-    
+
     for patch_id, isel_dict in label_isel_dict.items():
-        ds_patch = ds.isel(**isel_dict[0]).compute()  
-        da_label = xr_obj["label"].isel(**isel_dict[0]) 
-        
+        ds_patch = ds.isel(**isel_dict[0]).compute()
+        da_label = xr_obj["label"].isel(**isel_dict[0])
+
         stats = calculate_image_statistics(ds_patch, da_label)
-        stats["patch_id"] = patch_id-1
+        stats["patch_id"] = patch_id - 1
         patch_statistics.append(stats)
-        
+
         # Stack patches along a new dimension
         ds_patch = ds_patch.expand_dims("patch", axis=0)
-        for var in ["SCorientation", "dataQuality", "lon", "lat", "gpm_along_track_id", "height", "time", "gpm_id", "gpm_granule_id"]:
+        for var in [
+            "SCorientation",
+            "dataQuality",
+            "lon",
+            "lat",
+            "gpm_along_track_id",
+            "height",
+            "time",
+            "gpm_id",
+            "gpm_granule_id",
+        ]:
             ds_patch[var] = ds_patch[var].expand_dims("patch", axis=0)
-        
-        #ds_patch["label_image"] = da_label.expand_dims("patch", axis=0)
+
+        # ds_patch["label_image"] = da_label.expand_dims("patch", axis=0)
         ds_patch["label_image"] = da_label.expand_dims("patch", axis=0)
         ds_patch = ds_patch.drop_vars(ds_patch.gpm.vertical_variables)
         ds_patch = ds_patch.drop_vars("height")
 
         stacked_patches.append(ds_patch)
-    
+
     # Ensure output directory exists
     output_dir = os.path.expanduser(output_dir)
     os.makedirs(output_dir, exist_ok=True)
-    
+
     relative_path = os.path.join(*filepath.split(os.sep)[-4:-2])
-    parquet_save_dir = os.path.join(output_dir,"parquet/", relative_path)
+    parquet_save_dir = os.path.join(output_dir, "parquet/", relative_path)
     os.makedirs(parquet_save_dir, exist_ok=True)
-    zarr_save_dir = os.path.join(output_dir,"zarr/", relative_path)
+    zarr_save_dir = os.path.join(output_dir, "zarr/", relative_path)
     os.makedirs(zarr_save_dir, exist_ok=True)
 
     # File names
     filename = os.path.basename(filepath).replace(".HDF5", "").replace(".", "_")
     parquet_path = os.path.join(parquet_save_dir, f"{filename}.parquet")
     zarr_path = os.path.join(zarr_save_dir, f"{filename}.zarr")
-    
+
     # Save statistics as Parquet
     df = pd.DataFrame(patch_statistics)
     if "time" in df.columns:
         df["time"] = pd.to_datetime(df["time"], format="%Y-%m-%dT%H:%M:%S.%f")
     df.to_parquet(parquet_path)
-    
+
     # Save patch images as Zarr
     if stacked_patches:
         ds_stacked = xr.concat(stacked_patches, dim="patch")
@@ -148,25 +157,23 @@ def compute_gpm_storm_db(filepath, output_dir):
         ds_stacked.attrs["gpm_id_end"] = gpm_id_end
         ds_stacked.attrs["first_time"] = first_time
         ds_stacked.attrs["last_time"] = last_time
-        ds_stacked.to_zarr(zarr_path, mode="w") 
+        ds_stacked.to_zarr(zarr_path, mode="w")
 
-    return None
-        
 
 @dask.delayed
 def run_feature_extraction(filepath, dst_dir, force):
     with dask.config.set(scheduler="single-threaded"):
-        try: 
+        try:
             run_granule_feature_extraction(filepath, dst_dir=dst_dir, force=force)
             msg = ""
-        except Exception as e: 
+        except Exception as e:
             msg = f"Processing of {filepath} failed with '{e}'."
-    return msg 
+    return msg
 
 
 def run_granule_feature_extraction(filepath, dst_dir, force=False):
-    
-    # Define filepath 
+
+    # Define filepath
     start_time = get_start_time_from_filepaths(filepath)[0]
     filename = os.path.basename(filepath).replace(".HDF5", "")
     filename = f"GPM_STORM.{filename}.parquet"
@@ -174,11 +181,11 @@ def run_granule_feature_extraction(filepath, dst_dir, force=False):
     dir_path = os.path.join(dst_dir, dirtree)
     os.makedirs(dir_path, exist_ok=True)
     df_filepath = os.path.join(dir_path, filename)
-    
-    if os.path.exists(df_filepath): 
-        if force: 
+
+    if os.path.exists(df_filepath):
+        if force:
             os.remove(df_filepath)
-        else: 
+        else:
             raise ValueError(f"force=False and {filepath} already exists.")
 
     # List some variables of interest
@@ -198,15 +205,15 @@ def run_granule_feature_extraction(filepath, dst_dir, force=False):
         "binEchoBottom",
         "landSurfaceType",
     ]
-    
+
     # Open granule dataset
     ds = gpm.open_granule(filepath, variables=variables, scan_mode="FS")
-    
-    # Put in memory data for label definition 
+
+    # Put in memory data for label definition
     ds["precipRateNearSurface"] = ds["precipRateNearSurface"].compute()
     da = ds["precipRateNearSurface"]
-    
-    # 
+
+    #
     ###################
     #### Labelling ####
     ###################
@@ -218,8 +225,7 @@ def run_granule_feature_extraction(filepath, dst_dir, force=False):
     sort_by = "area"
     sort_decreasing = True
     label_name = "label"
-  
-    
+
     # Retrieve labeled xarray object
     xr_obj = da.ximage.label(
         min_value_threshold=min_value_threshold,
@@ -231,7 +237,7 @@ def run_granule_feature_extraction(filepath, dst_dir, force=False):
         sort_decreasing=sort_decreasing,
         label_name=label_name,
     )
-       
+
     ##################################
     #### Label Patches Extraction ####
     ##################################
@@ -241,7 +247,7 @@ def run_granule_feature_extraction(filepath, dst_dir, force=False):
     label_name = "label"
     labels_id = None
     n_labels = None
-    n_patches = np.Inf
+    n_patches = np.inf
     # Patch Extraction Options
     centered_on = "label_bbox"
     padding = 0
@@ -260,64 +266,65 @@ def run_granule_feature_extraction(filepath, dst_dir, force=False):
         # Tiling/Sliding Options
         partitioning_method=None,
     )
-        
+
     # patch statistics extraction
-        
+
     # Read first in memory to speed up computations [9 seconds]
     ds["airTemperature"] = ds["airTemperature"].compute()
     ds["zFactorFinal"] = ds["zFactorFinal"].compute()
     ds["precipRateNearSurface"] = ds["precipRateNearSurface"].compute()
     ds["sunLocalTime"] = ds["sunLocalTime"].compute()
-    
+
     # Compute statistics for each patch
     n_patches = len(patch_isel_dict)
-    patch_statistics = [
-        calculate_image_statistics(ds, patch_isel_dict[i][0]) for i in range(1, n_patches)
-    ]
-        
+    patch_statistics = [calculate_image_statistics(ds, patch_isel_dict[i][0]) for i in range(1, n_patches)]
+
     # Create a pandas DataFrame from the list
     df = pd.DataFrame(patch_statistics)
-    df['time'] = pd.to_datetime(df['time'], format='%Y-%m-%dT%H:%M:%S.%f')
+    df["time"] = pd.to_datetime(df["time"], format="%Y-%m-%dT%H:%M:%S.%f")
     # Save DataFrame to Parquet
     df.to_parquet(df_filepath)
 
 
-def get_gpm_storm_patch(granule_id, 
-                        slice_start, 
-                        slice_end,
-                        date, 
-                        product="2A-DPR",
-                        scan_mode="FS",
-                        chunks={},
-                        verbose=True,
-                        variables=["precipRateNearSurface"]):
-    
-    start_time = date - timedelta(hours = 5)
-    end_time = date + timedelta(hours = 5)
-    
-    filepaths = find_filepaths(product=product,  
-                               product_type="RS", 
-                               storage="local", 
-                               version=7, 
-                               start_time=start_time, 
-                               end_time=end_time, 
-                               verbose=verbose,
-                               parallel=False,
-                               )
+def get_gpm_storm_patch(
+    granule_id,
+    slice_start,
+    slice_end,
+    date,
+    product="2A-DPR",
+    scan_mode="FS",
+    chunks={},
+    verbose=True,
+    variables=["precipRateNearSurface"],
+):
+
+    start_time = date - timedelta(hours=5)
+    end_time = date + timedelta(hours=5)
+
+    filepaths = find_filepaths(
+        product=product,
+        product_type="RS",
+        storage="local",
+        version=7,
+        start_time=start_time,
+        end_time=end_time,
+        verbose=verbose,
+        parallel=False,
+    )
     print(filepaths)
     if len(filepaths) == 0:
         raise ValueError(f"No file available between {start_time} and {end_time}")
     granule_ids = get_granule_from_filepaths(filepaths)
     indices = [i for i, iid in enumerate(granule_ids) if iid == granule_id]
-    if len(indices) == 0: 
+    if len(indices) == 0:
         raise ValueError(f"File corresponding to granule_id {granule_id} not found !")
     filepath = filepaths[indices[0]]
     if verbose:
         print(f"filepath: {filepath}")
-        
+
     # Open granule dataset
     ds = gpm.open_granule(filepath, variables=variables, scan_mode=scan_mode, chunks=chunks)
-    if (slice_end - slice_start < 49):
-        slice_end =slice_start + 49
+    if slice_end - slice_start < 49:
+        slice_end = slice_start + 49
     ds = ds.isel(along_track=slice(slice_start, slice_end))
     return ds

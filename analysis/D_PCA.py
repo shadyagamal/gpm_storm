@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Compute and visualize the PCA from patch statistics.
 
@@ -7,6 +6,7 @@ Compute and visualize the PCA from patch statistics.
 """
 
 import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -36,18 +36,19 @@ def preprocess_data(df, nan_threshold=0):
     df_scaled = pd.DataFrame(
         scaler.fit_transform(df_cleaned),
         columns=df_cleaned.columns,
-        index=df_cleaned.index
+        index=df_cleaned.index,
     )
 
     print(f"Data preprocessing complete! {len(columns_to_drop)} columns removed due to NaNs.\n")
     return df_scaled
+
 
 def perform_pca(df_scaled, variance_threshold=0.95, top_n=5):
     """
     Perform PCA and determine the number of components to retain.
     """
     print("Performing PCA...")
-    
+
     pca = PCA()
     pca.fit(df_scaled)
     principal_components = pca.fit_transform(df_scaled)
@@ -95,7 +96,7 @@ def perform_pca(df_scaled, variance_threshold=0.95, top_n=5):
     pca = PCA(n_components=num_components)
     df_pca = pd.DataFrame(
         pca.fit_transform(df_scaled),
-        columns=[f"PC{i}" for i in range(1, num_components + 1)]
+        columns=[f"PC{i}" for i in range(1, num_components + 1)],
     )
 
     return pca, df_pca
@@ -105,6 +106,7 @@ def main():
     df = pd.read_parquet(FILEPATH)
     df_scaled = preprocess_data(df)
     pca, df_pca = perform_pca(df_scaled, top_n=20)
+
 
 if __name__ == "__main__":
     main()

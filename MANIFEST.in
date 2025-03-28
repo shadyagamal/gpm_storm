@@ -1,0 +1,9 @@
+prune .github
+prune ci
+prune docs
+prune gpm_storm/tests
+prune tutorials
+prune scripts
+prune analysis
+prune data
+prune olds
