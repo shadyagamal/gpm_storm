@@ -1,0 +1,12 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "patch",
+        "cross_track",
+        "along_track",
+        "radar_frequency"
+    ],
+    "coordinates": "lat lon",
+    "gpm_api_product": "2A-DPR",
+    "grid_mapping": "crsWGS84",
+    "units": "dBZ"
+}

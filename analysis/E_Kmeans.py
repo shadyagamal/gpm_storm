@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Compute and visualize Kmeans clustering from patch statistics.
 
@@ -7,14 +6,16 @@ Compute and visualize Kmeans clustering from patch statistics.
 """
 
 import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
+from sklearn.preprocessing import StandardScaler
 
-FILEPATH = os.path.expanduser("~/gpm_storm/data/largest_patch_statistics.parquet") # f"feature_{granule_id}.parquet"
+FILEPATH = os.path.expanduser("~/gpm_storm/data/largest_patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
+
 
 def preprocess_data(df):
     """
@@ -41,7 +42,7 @@ def find_optimal_clusters(data, min_k=2, max_k=30):
     Find the optimal number of clusters using silhouette score.
     """
     print("Finding the optimal number of clusters...")
-    
+
     best_k = min_k
     best_score = -1
     silhouette_scores = []
@@ -74,6 +75,7 @@ def find_optimal_clusters(data, min_k=2, max_k=30):
 
     return best_k
 
+
 def perform_kmeans(data, n_clusters):
     """
     Perform K-Means clustering and return model, labels, and cluster centers.
@@ -86,6 +88,7 @@ def perform_kmeans(data, n_clusters):
     print("K-Means clustering complete!\n")
     return kmeans, kmeans.labels_, kmeans.cluster_centers_
 
+
 def plot_clusters(data, labels, cluster_centers, n_clusters):
     """
     Plot K-Means clustering results.
@@ -97,18 +100,27 @@ def plot_clusters(data, labels, cluster_centers, n_clusters):
     # Scatter plot of data points with different colors for each cluster
     for i in range(n_clusters):
         plt.scatter(
-            data[labels == i, 0], data[labels == i, 1], label=f"Cluster {i + 1}", alpha=0.5
+            data[labels == i, 0],
+            data[labels == i, 1],
+            label=f"Cluster {i + 1}",
+            alpha=0.5,
         )
 
     # Plot cluster centers
     plt.scatter(
-        cluster_centers[:, 0], cluster_centers[:, 1], c="black", marker="x", s=100, label="Centroids"
+        cluster_centers[:, 0],
+        cluster_centers[:, 1],
+        c="black",
+        marker="x",
+        s=100,
+        label="Centroids",
     )
 
     plt.title("K-Means Clustering")
     plt.legend()
     plt.grid()
     plt.show()
+
 
 def main():
     df = pd.read_parquet(FILEPATH)
@@ -122,6 +134,7 @@ def main():
 
     # Visualization
     plot_clusters(df_scaled, labels, cluster_centers, optimal_k)
+
 
 if __name__ == "__main__":
     main()

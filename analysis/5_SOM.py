@@ -3,22 +3,14 @@
 
 @author: shadya
 """
-#%% Imports
-from pathlib import Path
-from netCDF4 import Dataset
-from PIL import Image
-import numpy as np
-import pandas as pd
-import xarray as xr
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import seaborn as sns
+# %% Imports
 import os
+from pathlib import Path
 
-import umap
-import somoclu
+import numpy as np
+from PIL import Image
 
-#%% Step 1: Define the paths
+# %% Step 1: Define the paths
 figs_path = Path("~/figs")
 Data_path = Path("~data/")
 
