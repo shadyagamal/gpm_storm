@@ -10,6 +10,10 @@ import gpm # noqa
 import pandas as pd
 import glob
 import xarray as xr
+import pyarrow as pa
+import pyarrow.dataset as ds
+import pyarrow.parquet as pq
+from gpm.bucket.writers import preprocess_writer_kwargs
 
 def concatenate_parquet_files(input_dir, recursive=True):
     """
@@ -68,12 +72,79 @@ def find_zarr_file_for_patch(row, zarr_directory, filename_pattern="*.zarr"):
     print(f"⚠️ No matching Zarr file found for granule_id: {granule_id} in {year}/{month}")
     return None, None
 
+def concatenate_parquet_files_arrow(input_dir, output_dir, row_group_size="200MB", max_file_size="2GB"):
+    """
+    Efficiently concatenates all Parquet files in a directory using PyArrow.
 
-parquet_dir ="/ltenas2/data/GPM_STORM_DB/parquet"
-zarr_dir = "/ltenas2/data/GPM_STORM_DB/zarr"
-concatenated_df = concatenate_parquet_files(parquet_dir)
+    Args:
+        input_dir (str): Path to the directory containing Parquet files.
+        output_dir (str): Destination directory for the merged dataset.
+        row_group_size (str): Row group size for efficient writing.
+        max_file_size (str): Maximum file size per output Parquet file.
+    
+    Returns:
+        None
+    """
+    # Find all Parquet files
+    parquet_files = glob.glob(os.path.join(input_dir, "**/*.parquet"), recursive=True)
+    if not parquet_files:
+        raise ValueError(f"No Parquet files found in {input_dir}")
 
-patch_row = concatenated_df.iloc[43]
+    # Read dataset using PyArrow
+    dataset = ds.dataset(parquet_files, format="parquet")
+
+    # Load a template table from one of the Parquet files
+    template_table = pq.read_table(parquet_files[0])
+
+    # Define writer options
+    writer_kwargs = {
+        "row_group_size": row_group_size,
+        "max_file_size": max_file_size,
+        "compression": "snappy",
+        "compression_level": None,
+        "max_open_files": 0,
+        "use_threads": True,
+        "write_metadata": False,
+        "write_statistics": False,
+    }
+
+    # Process writer kwargs with a template table
+    writer_kwargs, metadata_collector = preprocess_writer_kwargs(
+        writer_kwargs=writer_kwargs, df=template_table
+    )
+
+    # Define scanner for reading data efficiently
+    scanner = dataset.scanner(
+        batch_size=131_072,
+        batch_readahead=10,
+        fragment_readahead=20,
+        use_threads=True,
+    )
+
+    # Write concatenated dataset to the output directory
+    ds.write_dataset(
+        scanner,
+        base_dir=output_dir,
+        basename_template="merged_data_{i}.parquet",
+        create_dir=True,
+        existing_data_behavior="overwrite_or_ignore",
+        **writer_kwargs,
+    )
+
+    print(f"Concatenated Parquet files saved to {output_dir}")
+
+parquet_dir ="/ltenas2/data/GPM_STORM_DB/parquet/2015"
+output_dir = "/ltenas2/data/GPM_STORM_DB/merged"
+zarr_dir = "/ltenas2/data/GPM_STORM_DB/zarr/2015"
+
+concatenate_parquet_files_arrow(parquet_dir, output_dir)
+#concatenated_df = concatenate_parquet_files(parquet_dir)
+
+df = pd.read_parquet("/ltenas2/data/GPM_STORM_DB/merged/merged_data_0.parquet")
+print(df.head())
+print(df.info())
+
+patch_row = df.iloc[43]
 zarr_path, zarr_patch = find_zarr_file_for_patch(patch_row, zarr_dir)
 zarr_patch['precipRateNearSurface'].gpm.plot_image()
 zarr_patch['label_image'].gpm.plot_image()
