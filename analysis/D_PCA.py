@@ -13,7 +13,7 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-FILEPATH = os.path.expanduser("~/gpm_storm/data/largest_patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
+FILEPATH = "/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet" 
 
 
 def preprocess_data(df, nan_threshold=0):

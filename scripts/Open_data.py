@@ -51,6 +51,7 @@ def find_zarr_file_for_patch(row, zarr_directory, filename_pattern="*.zarr"):
     Returns:
         tuple: (Path to matching Zarr file, Selected patch dataset) or (None, None) if not found.
     """
+    
     granule_id = str(row["gpm_granule_id"])
     patch_id = row["patch_id"]
     
@@ -133,14 +134,14 @@ def concatenate_parquet_files_arrow(input_dir, output_dir, row_group_size="200MB
 
     print(f"Concatenated Parquet files saved to {output_dir}")
 
-parquet_dir ="/ltenas2/data/GPM_STORM_DB/parquet/2015"
+parquet_dir ="/ltenas2/data/GPM_STORM_DB/parquet"
 output_dir = "/ltenas2/data/GPM_STORM_DB/merged"
-zarr_dir = "/ltenas2/data/GPM_STORM_DB/zarr/2015"
+zarr_dir = "/ltenas2/data/GPM_STORM_DB/zarr"
 
 concatenate_parquet_files_arrow(parquet_dir, output_dir)
 #concatenated_df = concatenate_parquet_files(parquet_dir)
 
-df = pd.read_parquet("/ltenas2/data/GPM_STORM_DB/merged/merged_data_0.parquet")
+df = pd.read_parquet("/ltenas2/data/GPM_STORM_DB/merged/merged_data_2016.parquet")
 print(df.head())
 print(df.info())
 
