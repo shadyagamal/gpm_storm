@@ -5,25 +5,17 @@ Train a Self-Organizing Map (SOM) using patch statistics.
 """
 
 import os
-import sys
-
 import pandas as pd
 import somoclu
 from sklearn.preprocessing import MinMaxScaler
+from gpm_storm.som.experiments import get_experiment_info, save_som  # type: ignore
 
-## Import local function
-PACKAGE_DIR = os.path.abspath(os.path.join(os.getcwd(), ".."))
-if PACKAGE_DIR not in sys.path:
-    sys.path.insert(0, PACKAGE_DIR)
 
-from gpm_storm.gpm_storm.som.experiments import get_experiment_info, save_som  # type: ignore
-
-# from gpm_storm.gpm_storm.features.dataset_analysis import filter_nan_values # TO PUT IN gpm_storm.som.preprocessing !
-
-FILEPATH = os.path.expanduser("~/gpm_storm/data/largest_patch_statistics.parquet")  # f"feature_{granule_id}.parquet"
-SOM_DIR = os.path.expanduser("~/gpm_storm/script")  # TODO to change ...
+filepath = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet") 
+df = pd.read_parquet(filepath) 
+SOM_DIR = os.path.expanduser("~/gpm_storm/scripts")  # TODO to change ...
 SOM_NAME = "zonal_SOM"  # TODO: THIS IS THE NAME IDENTIFYING THE EXPERIMENT
-
+vars = df.columns[0:-9]
 
 def preprocess_data(df, features):
     """Preprocess dataset by filtering NaNs and normalizing."""
@@ -52,7 +44,7 @@ def train_som(df_scaled, som_name):
     # Get experiment settings
     info_dict = get_experiment_info(som_name)
     # n_rows, n_columns = info_dict["som_grid_size"]
-    n_rows, n_columns = 5, 5
+    n_rows, n_columns = 10, 10
 
     # Convert DataFrame to NumPy array
     data = df_scaled.to_numpy()
@@ -81,13 +73,13 @@ def train_som(df_scaled, som_name):
 
 
 def main():
-    df = pd.read_parquet(FILEPATH)
+    df = pd.read_parquet(filepath)
 
     # Get experiment features
-    experiment_info = get_experiment_info(SOM_NAME)
-    features = experiment_info["features"]
+    # experiment_info = get_experiment_info(SOM_NAME)
+    # features = experiment_info["features"]
 
-    df_scaled = preprocess_data(df, features)
+    df_scaled = preprocess_data(df, vars)
 
     train_som(df_scaled, SOM_NAME)
 
