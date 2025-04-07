@@ -1,8 +1,0 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "along_track"
-    ],
-    "coverage_content_type": "auxiliaryInformation",
-    "description": "ID number of the GPM Granule",
-    "long_name": "GPM Granule ID"
-}

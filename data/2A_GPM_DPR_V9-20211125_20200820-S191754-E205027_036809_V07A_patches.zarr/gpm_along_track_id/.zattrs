@@ -1,9 +1,0 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "patch",
-        "along_track"
-    ],
-    "coverage_content_type": "auxiliaryInformation",
-    "description": "Along-Track ID.",
-    "long_name": "Along-Track ID"
-}
