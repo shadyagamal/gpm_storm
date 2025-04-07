@@ -262,7 +262,7 @@ plt.title("Correlation of UMAP with Original Features")
 plt.show()
 
 # Kmeans
-n_clusters = 100 # Choose based on your data
+n_clusters = 100
 kmeans = KMeans(n_clusters=n_clusters, random_state=42).fit(embedding)
 score = silhouette_score(embedding, kmeans.labels_)
 print(score)
@@ -277,7 +277,6 @@ plt.ylabel("UMAP 2")
 plt.title("UMAP with K-Means Clustering")
 plt.grid(True)
 plt.show()
-
 
 
 # Binned maps

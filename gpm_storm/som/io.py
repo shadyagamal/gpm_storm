@@ -69,8 +69,8 @@ def create_som_df_array(som, df):
 
 def _open_sample_dataset(df, index, variables="precipRateNearSurface"):
     granule_id = df.iloc[index]["gpm_granule_id"]
-    slice_start = df.iloc[index]["along_track_start"]
-    slice_end = df.iloc[index]["along_track_end"]
+    slice_start = df.iloc[index]["gpm_id_start"]
+    slice_end = df.iloc[index]["gpm_id_end"]
     date = df.iloc[index]["time"]
     ds = get_gpm_storm_patch(
         granule_id=granule_id,
