@@ -1,8 +1,0 @@
-{
-    "_ARRAY_DIMENSIONS": [
-        "cross_track"
-    ],
-    "coverage_content_type": "auxiliaryInformation",
-    "description": "Cross-Track ID.",
-    "long_name": "Cross-Track ID"
-}
