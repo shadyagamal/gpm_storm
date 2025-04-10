@@ -29,10 +29,10 @@ stats = ["P_mean", "P_std", "P_center_count", "P_sum",
 fig, axes = plt.subplots(2, 4, figsize=(20, 10))  # 2 rows, 4 columns
 axes = axes.flatten()
 for i, stat in enumerate(stats):
-    sns.kdeplot(df[stat], fill=True, ax=axes[i])
+    sns.histplot(df[stat], bins=100, ax=axes[i], stat="probability")
     axes[i].set_title(stat)
     axes[i].set_xlabel("")
-    axes[i].set_ylabel("Frequency")
+    axes[i].set_ylabel("Relative Frequency")
     axes[i].set_yscale("log")
 plt.tight_layout()
 plt.show()
@@ -56,7 +56,7 @@ for i, var_template in enumerate(variables):
             labels.append(f"GT{t}") 
     sns.boxplot(data=boxplot_data, ax=ax, notch=True)
     ax.set_title(variables[i]) 
-    ax.set_yscale("log")  
+    # ax.set_yscale("log")  
     ax.set_xticklabels(labels, rotation=45)  
 plt.tight_layout()
 plt.show()
