@@ -141,9 +141,10 @@ zarr_dir = "/ltenas2/data/GPM_STORM_DB/zarr"
 concatenate_parquet_files_arrow(parquet_dir, output_dir)
 #concatenated_df = concatenate_parquet_files(parquet_dir)
 
-df = pd.read_parquet("/ltenas2/data/GPM_STORM_DB/merged/merged_data_2016.parquet")
+df = pd.read_parquet("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet")
 print(df.head())
 print(df.info())
+df1 = pd.read_parquet("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_1.parquet")
 
 patch_row = df.iloc[43]
 zarr_path, zarr_patch = find_zarr_file_for_patch(patch_row, zarr_dir)

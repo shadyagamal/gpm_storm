@@ -10,6 +10,7 @@ import os
 import sys
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
+from matplotlib import colors, cm
 import numpy as np
 import pandas as pd
 import random
@@ -26,12 +27,7 @@ from gpm_storm.som.io import (
 )
 from gpm_storm.som.plot import (
     plot_images,
-    plot_som_array_datasets,
-    plot_som_feature_statistics,
 )
-from matplotlib import colors
-from pyart.graph import *
-cmap = "NWSRef"
 
 
 
@@ -120,15 +116,12 @@ for row in range(som_shape[0]):
 
 
 cmap = "Wild25"
-norm = colors.LogNorm(vmin=0.01, vmax=160)
-
+norm = colors.LogNorm(vmin=0.01, vmax=300)
 fig, axes = plt.subplots(10, 10, figsize=(10, 10))
-
 for row in range(10):
     for col in range(10):
         ax = axes[row, col]
         ax.axis("off")
-
         ds = arr_ds[row, col]
         if ds is not None:
             da = ds["precipRateNearSurface"]
@@ -140,11 +133,11 @@ for row in range(10):
                 add_labels=False,
                 interpolation="nearest"
             )
-
 plt.tight_layout()
 img_fpath = os.path.join(figs_som_dir, "som_grid_samples_clean.png")
-plt.savefig(img_fpath, dpi=300)
+# plt.savefig(img_fpath, dpi=300)
 plt.show()
+
 
 ### Plot SOM node samples 
 variable = "precipRateNearSurface"
@@ -206,6 +199,39 @@ for row in range(n_rows):
 
             fig.savefig(img_fpath_map)
             plt.close(fig)  # Free memory
+            
+            
+# Mean Heatmaps  
+variable = "P_mean"          
+mean_values = np.full((10, 10), np.nan)  # Default NaNs for empty nodes
+
+for row in range(10):
+    for col in range(10):
+        df_node = arr_df[row, col]
+        if not df_node.empty:
+            mean_val = df_node[variable].mean()
+            mean_values[row, col] = mean_val            
+
+plt.figure(figsize=(8, 8))
+cmap = plt.cm.viridis
+masked_array = np.ma.masked_invalid(mean_values)
+
+plt.imshow(masked_array, cmap=cmap, origin="upper")
+cbar = plt.colorbar()
+cbar.set_label(f"Mean {variable}")
+
+plt.title(f"Mean {variable} per SOM Node")
+plt.xlabel("SOM Column")
+plt.ylabel("SOM Row")
+plt.xticks(np.arange(10))
+plt.yticks(np.arange(10))
+plt.grid(False)
+
+img_fpath = os.path.join(figs_som_dir, f"som_mean_{variable}.png")
+plt.savefig(img_fpath, dpi=300)
+plt.show()
+
+
 
 # df_stats = create_som_df_features_stats(df)
 # fig = plot_som_feature_statistics(df_stats, feature='precipitation_average')
