@@ -8,9 +8,10 @@ Created on Wed Apr  9 16:35:33 2025
 
 import numpy as np
 from scipy.spatial.distance import cdist
+from sklearn.neighbors import NearestNeighbors
 
 
-def quantization_error(som, data):
+def quantization_error_old(som, data):
     """Calculate the Quantization Error (QE)"""
     # Compute the distance between the data points and the corresponding map units
     distances = cdist(data, som.get_codebook().reshape(-1, som.get_codebook().shape[-1]))
@@ -19,7 +20,7 @@ def quantization_error(som, data):
     return qe
 
 
-def topographic_product(som, data):
+def topographic_product_old(som, data):
     """Calculate the Topographic Product"""
     topographic_errors = []
     for sample in data:
@@ -39,7 +40,7 @@ def topographic_product(som, data):
     return np.mean(topographic_errors)
 
 
-def topographic_error(som, data):
+def topographic_error_old(som, data):
     """Calculate the Topographic Error"""
     errors = []
     for sample in data:
@@ -54,7 +55,7 @@ def topographic_error(som, data):
     return np.mean(errors)
 
 
-def trustworthiness(som, data):
+def trustworthiness_old(som, data):
     """Calculate the Trustworthiness metric"""
     errors = []
     for sample in data:
@@ -69,7 +70,7 @@ def trustworthiness(som, data):
     return 1 - np.mean(errors)
 
 
-def neighborhood_preservation(som, data):
+def neighborhood_preservation_old(som, data):
     """Calculate the Neighborhood Preservation metric"""
     errors = []
     for sample in data:
@@ -84,6 +85,66 @@ def neighborhood_preservation(som, data):
 
     return 1 - np.mean(errors)
 
+def trustworthiness(X, W, bmus, n_neighbors=5):
+    """
+    Computes trustworthiness of SOM mapping.
+    """
+    n_samples = X.shape[0]
+    knn = NearestNeighbors(n_neighbors=n_neighbors + 1).fit(X)
+    X_neighbors = knn.kneighbors(X, return_distance=False)[:, 1:]  # exclude self
+
+    som_codes = W[bmus[:, 0], bmus[:, 1]]
+    som_knn = NearestNeighbors(n_neighbors=n_neighbors + 1).fit(som_codes)
+    som_neighbors = som_knn.kneighbors(som_codes, return_distance=False)[:, 1:]
+
+    trust_sum = 0
+    for i in range(n_samples):
+        missing = np.setdiff1d(X_neighbors[i], som_neighbors[i], assume_unique=True)
+        for rank, j in enumerate(missing):
+            trust_sum += rank + 1  # ranks start from 1
+
+    u = 1 - (2 / (n_samples * n_neighbors * (2 * n_samples - 3 * n_neighbors - 1))) * trust_sum
+    return u
+
+def neighborhood_preservation(X, W, bmus, n_neighbors=5):
+    """
+    Computes neighborhood preservation: average overlap of neighbors.
+    """
+    n_samples = X.shape[0]
+    knn_input = NearestNeighbors(n_neighbors=n_neighbors + 1).fit(X)
+    input_neighbors = knn_input.kneighbors(X, return_distance=False)[:, 1:]
+
+    som_codes = W[bmus[:, 0], bmus[:, 1]]
+    knn_som = NearestNeighbors(n_neighbors=n_neighbors + 1).fit(som_codes)
+    som_neighbors = knn_som.kneighbors(som_codes, return_distance=False)[:, 1:]
+
+    overlaps = []
+    for i in range(n_samples):
+        overlap = len(np.intersect1d(input_neighbors[i], som_neighbors[i]))
+        overlaps.append(overlap / n_neighbors)
+
+    return np.mean(overlaps)
+
+def quantization_error(W, X):
+    flat_W = W.reshape(-1, W.shape[-1])
+    distances = cdist(X, flat_W)
+    min_distances = np.min(distances, axis=1)
+    return np.mean(min_distances)
+
+def topographic_error(W, X):
+    flat_W = W.reshape(-1, W.shape[-1])
+    codesize = W.shape[:2]
+    errors = []
+
+    for x in X:
+        dists = np.linalg.norm(flat_W - x, axis=1)
+        bmu_indices = np.argsort(dists)[:2]
+        bmu1 = np.unravel_index(bmu_indices[0], codesize)
+        bmu2 = np.unravel_index(bmu_indices[1], codesize)
+        dist = np.linalg.norm(np.array(bmu1) - np.array(bmu2))
+        errors.append(0 if dist == 1 else 1)
+
+    return np.mean(errors)
 
 def find_closest_neighbors(sample, data):
     """Find closest neighbors in input space"""
