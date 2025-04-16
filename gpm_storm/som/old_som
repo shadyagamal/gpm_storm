@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Apr 15 10:24:02 2025
+
+@author: gamal
+"""
+
+def train_som(X, W, G, n_iterations=10000, sigma=1.5, eta=0.5):
+    for t in range(n_iterations):
+        x = X[np.random.randint(0, X.shape[0])]
+        
+        #BMU
+        diffs = W - x  
+        dist = np.linalg.norm(diffs, axis=2)
+        bmu = np.unravel_index(np.argmin(dist), dist.shape)
+        for n in G.nodes():
+            dist = nx.shortest_path_length(G, source=bmu,target=n)
+            h = np.exp(-(dist / (sigma ** 2)))
+            i, j = n
+            W[i, j] += eta * h * (x - W[i, j])
+    return W
+
+def train_som_optimized(X, W, distance_matrix, n_iterations=100, sigma=1.5, eta=0.5, batch_size=10):
+    m, k, dim = W.shape
+    for t in range(n_iterations):
+        batch = X[np.random.choice(X.shape[0], size=batch_size, replace=False)]
+        delta_W = np.zeros_like(W)
+        for x in batch:
+            dists = np.linalg.norm(W - x, axis=2)
+            bmu = np.unravel_index(np.argmin(dists), dists.shape)
+            distances = distance_matrix[bmu[0], bmu[1]]
+            h = np.exp(-distances / (sigma ** 2))[:, :, np.newaxis]
+            delta_W += eta * h * (x - W)
+        W += delta_W / batch_size
+    return W
+
+def train_som_epochwise(X, W, distance_matrix, n_epochs=100, sigma=1.5, eta=0.5, batch_size=64):
+    m, k, dim = W.shape
+    n_samples = X.shape[0]
+    
+    prev_bmus = np.zeros((n_samples, 2), dtype=int)
+    bmu_movement = []
+    bmu_switch_count = []
+    
+    for epoch in range(n_epochs):
+        X_shuffled = X[np.random.permutation(X.shape[0])]
+        current_bmus = np.zeros((n_samples, 2), dtype=int)
+        for i in range(0, n_samples, batch_size):
+            batch = X_shuffled[i:i+batch_size]
+            delta_W = np.zeros_like(W)
+            for x in batch:
+                dists = np.linalg.norm(W - x, axis=2)
+                bmu = np.unravel_index(np.argmin(dists), dists.shape)
+                distances = distance_matrix[bmu[0], bmu[1]]
+                h = np.exp(-distances / (sigma ** 2))[:, :, np.newaxis]
+                delta_W += eta * h * (x - W)
+            W += delta_W / batch.shape[0]
+    return W
