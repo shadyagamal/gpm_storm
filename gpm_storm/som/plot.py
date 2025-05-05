@@ -55,7 +55,7 @@ def plot_som_array_datasets(arr_ds, figsize=(10, 10), plot_kwargs={}, cbar_kwarg
     return fig
 
 
-def plot_images(list_ds, ncols=3, figsize=(15, 5), plot_kwargs={}, cbar_kwargs={}, variable="precipRateNearSurface"):
+def plot_images(list_ds, ncols=5, figsize=(15, 5), plot_kwargs={}, cbar_kwargs={}, variable="precipRateNearSurface"):
 
     num_images = len(list_ds)
 

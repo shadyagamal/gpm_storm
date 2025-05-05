@@ -16,9 +16,9 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 import joblib
 
-filepath = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet") 
+filepath = "/home/gamal/gpm_storm/data/merged_data_total_0_with_bmus_umap_kmeans.parquet" 
 df = pd.read_parquet(filepath)
-vars = df.columns[0:-9]
+vars = df.columns[0:-16]
 vars_df = df[vars]
 
 # Visualisation ---------------------------------------------------------------
@@ -78,9 +78,9 @@ df_cleaned_rows = df_cleaned.dropna(axis=0)
 # Standardization
 scaler = StandardScaler()
 df_scaled = pd.DataFrame(
-    scaler.fit_transform(df),
-    columns=df.columns,
-    index=df.index)
+    scaler.fit_transform(df_cleaned),
+    columns=df_cleaned.columns,
+    index=df_cleaned.index)
 
 df_scaled_cols = pd.DataFrame(
     scaler.fit_transform(df_cleaned_cols),
@@ -225,9 +225,9 @@ plt.show()
 
 # UMAP
 # reducer = umap.UMAP()
-
 # joblib.dump(reducer, "umap_model.joblib")
-reducer = joblib.load("umap_model.joblib")
+
+reducer = joblib.load("/home/gamal/gpm_storm/data/umap_model.joblib")
 embedding = reducer.fit_transform(df_scaled_cols)
 
 plt.figure(figsize=(8, 6))
@@ -252,8 +252,8 @@ plt.show()
 # Feature Correlation in UMAP Space
 # umap_df = pd.DataFrame(embedding, columns=["UMAP1", "UMAP2"])
 # umap_df.to_parquet("umap_embedding.parquet")
-umap_df = pd.read_parquet("umap_embedding.parquet")
-
+umap_df = pd.read_parquet("/home/gamal/gpm_storm/data/umap_embedding.parquet")
+embedding = umap_df
 corr_matrix = pd.concat([umap_df, df_scaled_cols], axis=1).corr()
 
 plt.figure(figsize=(10, 8))
@@ -267,7 +267,9 @@ kmeans = KMeans(n_clusters=n_clusters, random_state=42).fit(embedding)
 score = silhouette_score(embedding, kmeans.labels_)
 print(score)
 
-df["cluster"] = kmeans.labels_
+# df["cluster"] = kmeans.labels_
+umap_df["kmeans_cluster"] = kmeans.labels_
+
 
 plt.figure(figsize=(8, 6))
 plt.scatter(embedding[:, 0], embedding[:, 1], c=df["cluster"], cmap="tab10", alpha=0.5)
@@ -277,6 +279,14 @@ plt.ylabel("UMAP 2")
 plt.title("UMAP with K-Means Clustering")
 plt.grid(True)
 plt.show()
+
+# # Save updated DataFrame with UMAP and KMEANS
+# import os
+# df["UMAP0"] = umap_df.iloc[:, 0]
+# df["UMAP1"] = umap_df.iloc[:, 1]
+# df["kmeans_cluster"] = kmeans.labels_
+# new_filepath = os.path.expanduser("~/gpm_storm/data/merged_data_total_0_with_bmus_umap_kmeans.parquet")
+# df.to_parquet(new_filepath)
 
 
 # Binned maps

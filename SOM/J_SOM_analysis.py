@@ -8,6 +8,7 @@ Load trained SOM, assign BMUs, and visualize cluster properties.
 import itertools
 import os
 import sys
+import pycolorbar
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 from matplotlib import colors, cm
@@ -16,6 +17,7 @@ import pandas as pd
 import random
 import xarray as xr
 import glob
+import gpm
 from gpm.visualization import plot_cartopy_background  # type: ignore
 from gpm_storm.som.experiments import get_experiment_info, load_som
 from gpm_storm.som.io import (
@@ -29,134 +31,52 @@ from gpm_storm.som.plot import (
     plot_images,
 )
 
-
-
-# CONFIGURATION
-parallel = False
-filepath = "/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet"
-SOM_dir = os.path.expanduser("~/gpm_storm/scripts")  # Update if needed
-figs_dir = os.path.expanduser("~/gpm_storm/figs")
-SOM_name= "zonal_SOM"  # Change for different experiments
-variable = "precipRateNearSurface"
-Nimages = 25
-Ncols = 5
-figsize=(10, 10)
-figs_som_dir = os.path.join(figs_dir, SOM_name)
-os.makedirs(figs_som_dir, exist_ok=True)
-
-if parallel: 
-    create_dask_cluster() 
+def find_zarr_file_for_patch(row, zarr_directory, filename_pattern="*.zarr"):
+    granule_id = str(row["gpm_granule_id"])
+    patch_id = row["patch_id"]
     
-df = pd.read_parquet(filepath)
-vars = df.columns[0:-9]
-info_dict = get_experiment_info(SOM_name)
-features = info_dict["features"]
-df = df.dropna(subset=vars)
+    time = pd.to_datetime(row["time"])
+    year, month = time.year, time.month
 
-som = load_som(som_dir=SOM_dir, som_name=SOM_name)
-bmus = som.bmus  # Get BMU indices
-df["row"], df["col"] = bmus[:, 0], bmus[:, 1]
-
-# Check for missing row-col combinations
-row_values = range(10)  
-col_values = range(10)  
-expected_combinations = set(itertools.product(row_values, col_values))
-actual_combinations = set(zip(df["row"], df["col"], strict=False))
-missing_combinations = expected_combinations - actual_combinations
-
-# Save updated DataFrame with BMUs
-new_filepath = os.path.expanduser("~/gpm_storm/data/merged_data_total_0_with_bmus.parquet")
-df.to_parquet(new_filepath)
-
-arr_df = create_som_df_array(som=som, df=df)
-
-som_shape = arr_df.shape
-zarr_directory = "/ltenas2/data/GPM_STORM_DB/zarr"  
-arr_ds = np.empty(som_shape, dtype=object)
-
-for row in range(som_shape[0]):
-    for col in range(som_shape[1]):
-        df_node = arr_df[row, col]
-        if len(df_node) == 0:
-            continue  # No patch for this node
-
-        # Select a random patch from this node
-        index = random.randint(0, len(df_node) - 1)
-        patch_row = df_node.iloc[index]
-
-        granule_id = str(patch_row["gpm_granule_id"])
-        patch_id = patch_row["patch_id"]
-        time = pd.to_datetime(patch_row["time"])
-        year, month = time.year, time.month
-
-        search_path = os.path.join(zarr_directory, f"{year:04d}/{month:02d}", "*.zarr")
+    def try_find_file(y, m):
+        search_path = os.path.join(zarr_directory, f"{y:04d}/{m:02d}", filename_pattern)
         zarr_files = glob.glob(search_path)
-
-        patch_ds = None
         for zarr_file in zarr_files:
             if granule_id in os.path.basename(zarr_file):
-                ds = xr.open_zarr(zarr_file)
-                patch_ds = ds.isel(patch=patch_id)
-                break
+                ds_stacked = xr.open_zarr(zarr_file)
+                if patch_id < ds_stacked.sizes["patch"]:
+                    return zarr_file, ds_stacked.isel(patch=patch_id)
+        return None, None
 
-        if patch_ds is None:
-            print(f"⚠️ No match for SOM ({row},{col}) granule {granule_id}")
-            continue
+    # Try current month
+    result = try_find_file(year, month)
+    if result[0] is not None:
+        return result
 
-        arr_ds[row, col] = patch_ds
+    # Try previous month
+    prev_time = time - pd.DateOffset(months=1)
+    prev_year, prev_month = prev_time.year, prev_time.month
+    result = try_find_file(prev_year, prev_month)
+    if result[0] is not None:
+        return result
 
-
-
-# fig = plot_som_array_datasets(arr_ds, figsize=figsize, variable=variable)
-# fig.tight_layout()
-# img_fpath = os.path.join(figs_som_dir, "som_grid_samples_gpm_plot_image.png")
-# plt.savefig(img_fpath, dpi=300)
-# plt.show()
-# fig.close()
-
-
-cmap = "turbo"
-norm = colors.LogNorm(vmin=0.01, vmax=300)
-fig, axes = plt.subplots(10, 10, figsize=(10, 10))
-for row in range(10):
-    for col in range(10):
-        ax = axes[row, col]
-        ax.axis("off")
-        ds = arr_ds[row, col]
-        if ds is not None:
-            da = ds["precipRateNearSurface"]
-            da.plot.imshow(
-                ax=ax,
-                cmap=cmap,
-                norm=norm,
-                add_colorbar=False,
-                add_labels=False,
-                interpolation="nearest"
-            )
-plt.tight_layout()
-img_fpath = os.path.join(figs_som_dir, "som_grid_samples_clean.png")
-# plt.savefig(img_fpath, dpi=300)
-plt.show()
+    print(f"No matching Zarr file found for granule_id: {granule_id} in {year}/{month} or {prev_time.year}/{prev_time.month:02d}")
+    return None, None
 
 
-### Plot SOM node samples 
-variable = "precipRateNearSurface"
-num_images = 25
-n_rows = 5
-n_columns = 5
-figsize = (15, 15)
+def build_som_patch_array(df, som, zarr_directory, variable="precipRateNearSurface"):
+    arr_df = create_som_df_array(som=som, df=df)
+    som_shape = arr_df.shape
+    arr_ds = np.empty(som_shape, dtype=object)
 
-for row in range(n_rows):
-    for col in range(n_columns):
-        img_fpath = os.path.join(figs_som_dir, f"node_{row}_{col}_samples.png")
-        img_fpath_map = os.path.join(figs_som_dir, f"node_{row}_{col}_map.png")
-        df_node = arr_df[row, col]
-        random_indices = random.sample(range(len(df_node)), num_images)
-        list_ds = []
-        for index in random_indices:
-            print(index)
+    for row in range(som_shape[0]):
+        for col in range(som_shape[1]):
+            df_node = arr_df[row, col]
+            if len(df_node) == 0:
+                continue
+
+            index = random.randint(0, len(df_node) - 1)
             patch_row = df_node.iloc[index]
-
             granule_id = str(patch_row["gpm_granule_id"])
             patch_id = patch_row["patch_id"]
             time = pd.to_datetime(patch_row["time"])
@@ -171,137 +91,196 @@ for row in range(n_rows):
                     ds = xr.open_zarr(zarr_file)
                     patch_ds = ds.isel(patch=patch_id)
                     break
-            list_ds.append(patch_ds)
- 
-        
-        # Plot sample images
-        fig = plot_images(list_ds, ncols=Ncols, figsize=(15, 15), variable=variable)
-        fig.tight_layout()
-        fig.savefig(img_fpath)
-        plt.close(fig)  # Free memory
 
-        # Filter dataset for this node
-        df_subset = df[(df["row"] == row) & (df["col"] == col)].copy()
+            if patch_ds is None:
+                print(f"⚠️ No match for SOM ({row},{col}) granule {granule_id}")
+                continue
 
-        if not df_subset.empty:
-            df_subset["time"] = pd.to_datetime(df_subset["time"])
-            df_subset["month"] = df_subset["time"].dt.month
+            arr_ds[row, col] = patch_ds
 
-            lon, lat = df_subset["lon"].values, df_subset["lat"].values
+    return arr_df, arr_ds
 
-            # Plot geographic distribution
-            fig, ax = plt.subplots(figsize=(12, 10), subplot_kw={"projection": ccrs.PlateCarree()})
-            plot_cartopy_background(ax)
-            sc = ax.scatter(lon, lat, transform=ccrs.PlateCarree(), c=df_subset["month"], s=2)
 
-            cbar = plt.colorbar(sc, ax=ax, orientation="vertical", pad=0.02)
-            cbar.set_label("Month")
 
-            fig.savefig(img_fpath_map)
-            plt.close(fig)  # Free memory
+def plot_som_grid_samples(arr_ds, save_dir, cbar_kwargs={}, **plot_kwargs):
+    os.makedirs(save_dir, exist_ok=True)
+    som_shape = arr_ds.shape
+
+    fig, axes = plt.subplots(*som_shape, figsize=(10, 10))
+    for row in range(som_shape[0]):
+        for col in range(som_shape[1]):
+            ax = axes[row, col]
+            ax.axis("off")
+            ds = arr_ds[row, col]
+            if ds is not None:
+                da = ds["precipRateNearSurface"]
+                plot_kwargs, cbar_kwargs = gpm.get_plot_kwargs(da.name, user_plot_kwargs=plot_kwargs,
+                                                               user_cbar_kwargs=cbar_kwargs)
+                da.plot.imshow(
+                    ax=ax,
+                    add_colorbar=False,
+                    add_labels=False,
+                    interpolation="nearest",
+                    **plot_kwargs,
+                )
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, "som_grid_samples_clean.png"), dpi=300)
+    plt.close(fig)
+    return None
+
+def plot_images_new(list_ds, ncols=5, figsize=(15, 5),
+                    variable="precipRateNearSurface"):
+    num_images = len(list_ds)
+    plot_kwargs, cbar_kwargs = gpm.get_plot_kwargs(variable)
+    # Calculate the number of rows and columns for the subplot grid
+    num_rows = int(np.ceil(num_images / ncols))  # Adjust as needed
+    num_cols = min(num_images, ncols)
+
+    fig, axes = plt.subplots(num_rows, num_cols, figsize=figsize)
+    fig.subplots_adjust(0, 0, 1, 1, wspace=0, hspace=0)
+    
+    for i, ax in enumerate(axes.flatten()):
+        ax.axis("off")
+        if i < num_images:
+            da = list_ds[i][variable]
+            da.plot.imshow(
+                ax=ax,
+                add_colorbar=False,
+                add_labels=False,
+                interpolation="nearest",
+                **plot_kwargs,
+            )
+    return fig
+
+
+
+def plot_node_samples_and_maps(arr_df, df, zarr_directory, save_dir, variable="precipRateNearSurface", 
+                                num_images=25, n_rows=10, n_cols=10):
+    os.makedirs(save_dir, exist_ok=True)
+    for row in range(n_rows):
+        for col in range(n_cols):
+            df_node = arr_df[row, col]
+            if len(df_node) < num_images:
+                continue  # Skip if not enough samples
+
+            random_indices = random.sample(range(len(df_node)), num_images)
+            list_ds = []
+
+            for index in random_indices:
+                patch_row = df_node.iloc[index]
+                patch_ds = None
+                zarr_file, patch_ds = find_zarr_file_for_patch(patch_row, zarr_directory, filename_pattern="*.zarr")
+                
+    
+                if patch_ds:
+                    list_ds.append(patch_ds)
+
+            if list_ds:
+                fig = plot_images_new(list_ds, figsize=(15, 15), ncols=5, variable=variable) 
+                fig.tight_layout()
+                img_path = os.path.join(save_dir, f"node_{row}_{col}_samples.png")
+                fig.savefig(img_path)
+                plt.close(fig)
+
+            df_subset = df[(df["row"] == row) & (df["col"] == col)].copy()
+
+            if not df_subset.empty:
+                df_subset["time"] = pd.to_datetime(df_subset["time"])
+                df_subset["month"] = df_subset["time"].dt.month
+
+                fig, ax = plt.subplots(figsize=(12, 6), subplot_kw={"projection": ccrs.PlateCarree()})
+                plot_cartopy_background(ax)
+                sc = ax.scatter(
+                    df_subset["lon"], df_subset["lat"], 
+                    transform=ccrs.PlateCarree(), c=df_subset["month"], s=2
+                )
+    
+                pycolorbar.plot_colorbar(p=sc, ax=ax, orientation="vertical", label="month") #pad=0.02))
+                # cbar = plt.colorbar(sc, ax=ax, orientation="vertical", pad=0.02)
+                # cbar.set_label("Month")
+
+                map_path = os.path.join(save_dir, f"node_{row}_{col}_map.png")
+                fig.savefig(map_path)
+                plt.close(fig)
+
             
             
-# Mean Heatmaps  
-variable = "P_mean"          
-mean_values = np.full((10, 10), np.nan)  # Default NaNs for empty nodes
+def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean"):
+    mean_values = np.full((10, 10), np.nan)
 
-for row in range(10):
-    for col in range(10):
-        df_node = arr_df[row, col]
-        if not df_node.empty:
-            mean_val = df_node[variable].mean()
-            mean_values[row, col] = mean_val            
+    for row in range(10):
+        for col in range(10):
+            df_node = arr_df[row, col]
+            if not df_node.empty:
+                mean_val = df_node[variable].mean()
+                mean_values[row, col] = mean_val
 
-plt.figure(figsize=(8, 8))
-cmap = plt.cm.viridis
-masked_array = np.ma.masked_invalid(mean_values)
+    plt.figure(figsize=(8, 8))
+    cmap = plt.cm.viridis
+    masked_array = np.ma.masked_invalid(mean_values)
 
-plt.imshow(masked_array, cmap=cmap, origin="upper")
-cbar = plt.colorbar()
-cbar.set_label(f"Mean {variable}")
+    plt.imshow(masked_array, cmap=cmap, origin="upper")
+    cbar = plt.colorbar()
+    cbar.set_label(f"Mean {variable}")
+    plt.title(f"Mean {variable} per SOM Node")
+    plt.xlabel("SOM Column")
+    plt.ylabel("SOM Row")
+    plt.xticks(np.arange(10))
+    plt.yticks(np.arange(10))
+    plt.grid(False)
 
-plt.title(f"Mean {variable} per SOM Node")
-plt.xlabel("SOM Column")
-plt.ylabel("SOM Row")
-plt.xticks(np.arange(10))
-plt.yticks(np.arange(10))
-plt.grid(False)
-
-img_fpath = os.path.join(figs_som_dir, f"som_mean_{variable}.png")
-plt.savefig(img_fpath, dpi=300)
-plt.show()
-
+    mean_path = os.path.join(save_dir, f"som_mean_{variable}.png")
+    plt.savefig(mean_path, dpi=300)
+    plt.show()
+    return None
 
 
-# df_stats = create_som_df_features_stats(df)
-# fig = plot_som_feature_statistics(df_stats, feature='precipitation_average')
+# --- Config ---
+filepath = "/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet"
+df = pd.read_parquet(filepath)
+som_dir = os.path.expanduser("~/gpm_storm/SOM/trained_soms/")  
+som_name = "Test_SOM"
+bmu_dir = os.path.expanduser(f"~/gpm_storm/data/{som_name}_with_bmus.parquet")
+figs_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}")
+os.makedirs(figs_dir, exist_ok=True)
+zarr_directory = "/ltenas2/data/GPM_STORM_DB/zarr"
 
-# def plot_feature_statistics(df):
-#     """Plot SOM feature statistics."""
-#     df_stats = create_som_df_features_stats(df)
-#     fig = plot_som_feature_statistics(df_stats, feature="precipitation_average")
-#     plt.show()
+# --- Load ---
+df_bmu = pd.read_parquet(bmu_dir)
+som = load_som(som_dir=som_dir, som_name=som_name)
+bmus = som.bmus
 
-
-# # 
-# def main():
-#     """Main function to run the SOM analysis pipeline."""
-
-
-# if __name__ == "__main__":
-#     main()
-
-
-
-# # Plot SOM grid
-# # plot_som_grid(arr_df, figs_som_dir)
-
-# # Plot SOM node samples and maps
-# # plot_som_node_samples(arr_df, df, n_rows, n_columns, figs_som_dir)
-
-# # Plot feature statistics
-# # plot_feature_statistics(df)
+row_values = range(10)  
+col_values = range(10)  
+expected_combinations = set(itertools.product(row_values, col_values))
+actual_combinations = set(zip(df_bmu["row"], df_bmu["col"], strict=False))
+missing_combinations = expected_combinations - actual_combinations
+if missing_combinations:
+    print(f"Missing nodes: {missing_combinations}")
+else:
+    print("No missing (row, col) combinations.\n")
 
 
-# # 
-# def _get_patch_image(img):
-#     max_value_position = np.unravel_index(np.argmax(img), img.shape)
-#     center_y, center_x = max_value_position
-#     if center_x < 25:
-#         img = img[:, 0:49]
-#     elif (img.shape[1] - center_x) > 25:
-#         start_x = center_x - 24
-#         end_x = center_x + 25
-#         img = img[:, start_x:end_x]
-#     else:
-#         img = img[:, -49:]
-#     return img
+# --- Build SOM Patch Arrays ---
+arr_df, arr_ds = build_som_patch_array(df_bmu, som, zarr_directory)
 
+# --- Plot Grid of Samples ---
+plot_som_grid_samples(
+    arr_ds, save_dir=figs_dir, 
+    # cmap="turbo", 
+    # norm=colors.LogNorm(vmin=0.01, vmax=300)
+)
 
-# def _remove_axis(ax):
-#     ax.set_title("")  # Set title to an empty string
-#     ax.set_xlabel("")  # Set xlabel to an empty string
-#     ax.set_ylabel("")  # Set ylabel to an empty string
-#     ax.get_xaxis().set_visible(False)
-#     ax.get_yaxis().set_visible(False)
+# --- Plot Node Samples and Maps ---
+plot_node_samples_and_maps(
+    arr_df, df_bmu, zarr_directory, 
+    save_dir=figs_dir, 
+    variable="precipRateNearSurface", 
+    num_images=25
+)
 
+# --- Plot Mean Variable per Node ---
+plot_mean_variable_per_node(
+    arr_df, save_dir=figs_dir, variable="P_mean"
+)
 
-# # 
-# # img_fpath = os.path.join(figs_som_dir, "som_grid_samples.png")
-# # nrows, ncols = arr_ds.shape
-# # cbar_kwargs = {"shrink": 0.8, "aspect": 20}
-# # plot_kwargs = {"cmap": "viridis", "interpolation": "nearest"}
-# # fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 10))
-# # fig.subplots_adjust(0, 0, 1, 1, wspace=0, hspace=0)
-# # for i in range(nrows):
-# #     for j in range(ncols):
-# #         ax = axes[i, j]
-# #         da = arr_ds[i, j][VARIABLE]
-# #         img = _get_patch_image(da.data)
-# #         ax.imshow(img, **plot_kwargs)
-# #         _remove_axis(ax)
-
-# # fig = plot_som_array_datasets(arr_ds, figsize=(5, 5), variable=VARIABLE)
-# # fig.tight_layout()
-# # fig.savefig(img_fpath)
-# # plt.close(fig)

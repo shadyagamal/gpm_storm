@@ -9,21 +9,47 @@ import pandas as pd
 import somoclu
 from sklearn.preprocessing import MinMaxScaler
 from gpm_storm.som.experiments import get_experiment_info, save_som  # type: ignore
-from gpm_storm.som.som_metrics import quantization_error, topographic_product
 import numpy as np
 from somperf.metrics import *
 from somperf.utils.topology import rectangular_topology_dist
 from minisom import MiniSom
+from gpm.visualization import plot_cartopy_background  # type: ignore
+from gpm_storm.som.experiments import get_experiment_info, load_som
+from gpm_storm.som.io import(
+    create_dask_cluster,
+    create_som_df_array,
+    create_som_df_features_stats,
+    create_som_sample_ds_array,
+    sample_node_datasets,)
+from gpm_storm.som.plot import(
+    plot_images,)
+import itertools
+
+# Initial chosen vars
+# ICC_30_max
+# ICC_40_max
+# LCC_30_max
+# LCC_40_max
+# CC_40_count
+# CC_30_count
+# P_max
+# P_sum
+# P_count
+# MP_sum
+# P_GT2_regions
+# P_GT2_count
+# P_GT10_regions
+# P_GT10_count
+# P_GT50_regions
+# P_GT50_count
+# P_GT120_regions
+# P_GT120_count
+# P_%_between_0_1
+# P_%_between_5_10
+# P_%_between_20_300
 
 
-filepath = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet") 
-df = pd.read_parquet(filepath) 
-som_dir = os.path.expanduser("~/gpm_storm/scripts")  
-som_name = "zonal_SOM"  
-vars = df.columns[0:-9]
-
-
-def preprocess_data(df, features):
+def preprocess_data(df, vars):
     """Preprocess dataset by filtering NaNs and normalizing."""
     df_cleaned = df.copy()
     fill_zero_cols = [
@@ -42,99 +68,88 @@ def preprocess_data(df, features):
     
     for col in fill_zero_cols:
         if col in df_cleaned.columns:
-            df[col] = df_cleaned[col].fillna(0)
-    df_cleaned = df.dropna(axis=1)
+            df_cleaned[col] = df_cleaned[col].fillna(0)
+            
+    df_selected = df_cleaned[vars]
+    df_na = df_selected.dropna(axis=1)
+    
     scaler = MinMaxScaler()
     df_scaled = pd.DataFrame(
-        scaler.fit_transform(df_cleaned[features]),
-        columns=features,
-        index=df_cleaned.index,
+        scaler.fit_transform(df_na),
+        columns=df_na.columns,
+        index=df_na.index,
     )
-    print(f"Data preprocessing complete! {len(df) - len(df_cleaned)} rows removed due to NaNs.\n")
-    return df_scaled
+
+    print(f"Data preprocessing complete! {len(df) - len(df_scaled)} rows removed due to NaNs.\n")
+    return df_cleaned, df_scaled, df_na
 
 
-def train_som(df_scaled, som_name):
+def train_som(df_scaled, som_name, som_dir, n_rows=10, n_columns=10):
     """
     Train a Self-Organizing Map (SOM) using the selected features.
     """
-    # n_rows, n_columns = 10, 10
     data = df_scaled.to_numpy()
-    X = data
-    map_size = (8, 10)
-    # Initialize SOM
-    # som = somoclu.Somoclu(
-    #     n_columns=n_columns,
-    #     n_rows=n_rows,
-    #     gridtype="rectangular",
-    #     maptype="planar",
-    # )
 
-    # # Train SOM
-    # som.train(
-    #     data=data,
-    #     epochs=100,
-    #     radius0=0,
-    #     radiusN=1,
-    #     scale0=0.5,
-    #     scaleN=0.001,
-    # )
-    som = MiniSom(map_size[0], map_size[1], X.shape[-1], sigma=1.0, learning_rate=1.0, random_seed=42)
-    som.random_weights_init(X)
-    som.train_random(X, 10000)
-    weights = som.get_weights().reshape(map_size[0]*map_size[1], -1)
-    print('Topographic product = ', topographic_product(rectangular_topology_dist(map_size), weights))
+    
+    # Initialize SOM
+    som = somoclu.Somoclu(
+        n_columns=n_columns,
+        n_rows=n_rows,
+        gridtype="rectangular",
+        maptype="planar",
+    )
+
+    # Train SOM
+    som.train(
+        data=data,
+        epochs=100,
+        radius0=0,
+        radiusN=1,
+        radiuscooling='linear',
+        scale0=0.5,
+        scaleN=0.001,
+        scalecooling='linear'
+    )
     
     # Save the trained SOM
-    # save_som(som, som_dir=som_dir, som_name=som_name)
-    # print("SOM training complete and model saved!\n")
+    save_som(som, som_dir=som_dir, som_name=som_name)
+    print("SOM training complete and model saved!\n")
+    return som
 
-def train_som(df_scaled, som_name=None, search_range=(5, 15), max_epochs=10000):
-    """
-    Train a Self-Organizing Map (SOM) using the selected features,
-    and find the optimal map size using the topographic product.
-    """
-    X = df_scaled.to_numpy()
-    input_len = X.shape[-1]
+def check_missing_combos(df,n_rows=10, n_columns=10):
+    row_values = range(10)  
+    col_values = range(10)  
+    expected_combinations = set(itertools.product(row_values, col_values))
+    actual_combinations = set(zip(df["row"], df["col"], strict=False))
+    missing_combinations = expected_combinations - actual_combinations
+    if missing_combinations:
+        print(f"Missing nodes: {missing_combinations}")
+    else:
+        print("No missing (row, col) combinations.\n")
+    return missing_combinations
 
-    best_P = np.inf
-    best_map_size = None
-    best_som = None
 
-    print("Searching for best map size using topographic product...")
-    for rows in range(search_range[0], search_range[1]+1):
-        for cols in range(search_range[0], search_range[1]+1):
-            som = MiniSom(rows, cols, input_len, sigma=1.0, learning_rate=1.0, random_seed=42)
-            som.random_weights_init(X)
-            som.train_random(X, max_epochs)
+filepath = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet") 
+som_dir = os.path.expanduser("~/gpm_storm/SOM/trained_soms/")  
+som_name = "Test_SOM"  
+n_rows, n_columns = 10, 10
 
-            weights = som.get_weights().reshape(rows * cols, -1)
-            P = topographic_product(rectangular_topology_dist((rows, cols)), weights)
+df = pd.read_parquet(filepath) 
+vars = df.columns[:134]
 
-            print(f"Map size {rows}x{cols} => Topographic product: {P:.4f}")
-            if abs(P) < abs(best_P):
-                best_P = P
-                best_map_size = (rows, cols)
-                best_som = som
+df_cleaned, df_scaled, df_na = preprocess_data(df, vars)
+som = train_som(df_na, som_name, som_dir, n_rows, n_columns)
+bmus = som.bmus  
 
-    print(f"\nBest map size: {best_map_size} with P = {best_P:.4f}")
+df_bmu = df_na.copy()
+df_bmu["row"], df_bmu["col"] = bmus[:, 0], bmus[:, 1]
+df_final = df.copy()
+df_final.loc[df_bmu.index, "row"] = df_bmu["row"]
+df_final.loc[df_bmu.index, "col"] = df_bmu["col"]
 
-    # Optionally save the best SOM
-    # if som_name:
-    #     save_som(best_som, som_dir=som_dir, som_name=som_name)
+missing_combinations = check_missing_combos(df_final,n_rows, n_columns)
 
-    return best_som, best_map_size, best_P
+new_filepath = os.path.expanduser(f"~/gpm_storm/data/{som_name}_with_bmus.parquet")
+df_final.to_parquet(new_filepath)
 
-def main():
-    df = pd.read_parquet(filepath)
-
-    # Get experiment features
-    # experiment_info = get_experiment_info(SOM_NAME)
-    # features = experiment_info["features"]
-
-    df_scaled = preprocess_data(df, vars)
-    # train_som(df_scaled, som_name)
-    # train_som(df_scaled, som_name=None, search_range=(100, 101), max_epochs=100)
-
-if __name__ == "__main__":
-    main()
+som = load_som(som_dir=som_dir, som_name=som_name)
