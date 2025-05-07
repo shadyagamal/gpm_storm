@@ -7,6 +7,7 @@
 
 # Folders
 /dask-worker-space/
+/gpm_storm/figs/
 
 # Byte-compiled / optimized / DLL files
 */__pycache__/
@@ -16,7 +17,12 @@
 
 # C extensions
 *.so
-
+*.zarr
+*.nc
+*.hdf5
+*.ipynb_checkpoints/
+*.log
+*.tmp
 # Distribution / packaging
 .Python
 build/
