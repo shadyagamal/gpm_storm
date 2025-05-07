@@ -7,7 +7,8 @@
 
 # Folders
 /dask-worker-space/
-gpm_storm/data/
+data/*
+SOM/trained_soms/*.pkl
 
 # Byte-compiled / optimized / DLL files
 */__pycache__/
