@@ -1,4 +1,4 @@
-"""
+r"""
 Train a Self-Organizing Map (SOM) using patch statistics.
 
 @author: shadya
@@ -8,45 +8,42 @@ import os
 import pandas as pd
 import somoclu
 from sklearn.preprocessing import MinMaxScaler
-from gpm_storm.som.experiments import get_experiment_info, save_som  # type: ignore
-import numpy as np
-from somperf.metrics import *
-from somperf.utils.topology import rectangular_topology_dist
-from minisom import MiniSom
-from gpm.visualization import plot_cartopy_background  # type: ignore
-from gpm_storm.som.experiments import get_experiment_info, load_som
-from gpm_storm.som.io import(
-    create_dask_cluster,
-    create_som_df_array,
-    create_som_df_features_stats,
-    create_som_sample_ds_array,
-    sample_node_datasets,)
-from gpm_storm.som.plot import(
-    plot_images,)
+from gpm_storm.som.experiments import save_som, load_som
 import itertools
+import numpy as np
+from scipy.spatial.distance import cdist
+from collections import Counter
+from scipy.stats import skew
 
-# Initial chosen vars
-# ICC_30_max
-# ICC_40_max
-# LCC_30_max
-# LCC_40_max
-# CC_40_count
-# CC_30_count
-# P_max
-# P_sum
-# P_count
-# MP_sum
-# P_GT2_regions
-# P_GT2_count
-# P_GT10_regions
-# P_GT10_count
-# P_GT50_regions
-# P_GT50_count
-# P_GT120_regions
-# P_GT120_count
-# P_%_between_0_1
-# P_%_between_5_10
-# P_%_between_20_300
+
+def bin_and_round_df(df):
+    binned_df = pd.DataFrame(index=df.index)
+    rounded_df = pd.DataFrame(index=df.index)
+    bin_edges = {}
+    for col in df.columns:
+        hist, edges = np.histogram(df[col], bins="doane")
+        bin_idx = np.digitize(df[col], bins=edges, right=False) - 1
+        bin_idx = np.clip(bin_idx, 0, len(edges) - 2)
+        bin_edges[col] = edges
+        binned_df[col] = bin_idx
+        rounded_df[col] = edges[:-1][bin_idx]
+    rounded_df = rounded_df.drop_duplicates()
+    return rounded_df, bin_edges
+
+def inverse_density_sample_df(df, sample_size=500000):
+    binned_df = pd.DataFrame(index=df.index)
+    for col in df.columns:
+        hist, edges = np.histogram(df[col])
+        bin_idx = np.digitize(df[col], bins=edges, right=False) - 1
+        bin_idx = np.clip(bin_idx, 0, len(edges) - 2)
+        binned_df[col] = bin_idx
+    bin_tuples = [tuple(row) for row in binned_df.values]
+    counts = Counter(bin_tuples)
+    densities = np.array([counts[tuple(row)] for row in binned_df.values])
+    probabilities = 1.0 / (densities + 1e-8)
+    probabilities /= probabilities.sum()
+    sampled_idx = np.random.choice(df.index, size=sample_size, replace=False, p=probabilities)
+    return df.loc[sampled_idx]
 
 
 def preprocess_data(df, vars):
@@ -66,22 +63,30 @@ def preprocess_data(df, vars):
         "LCC_40_mean", "LCC_40_std", "ICC_40_mean", "ICC_40_std",
         "LCC_30_max", "ICC_30_max", "LCC_40_max", "ICC_40_max"]
     
+    
     for col in fill_zero_cols:
         if col in df_cleaned.columns:
             df_cleaned[col] = df_cleaned[col].fillna(0)
             
-    df_selected = df_cleaned[vars]
-    df_na = df_selected.dropna(axis=1)
+    df_thresh = df_cleaned[df_cleaned["P_mean"]>1]
+    df_selected = df_thresh[vars]
+    df_selected = df_selected.dropna(axis=0)
     
+    skew_vals = df_selected.apply(skew, nan_policy='omit')
+    skewed_cols = skew_vals[skew_vals > 0.75].index.tolist()
+    for col in skewed_cols:
+        if (df_selected[col] >= 0).all():
+            df_selected[col] = np.log1p(df_selected[col])
+            
     scaler = MinMaxScaler()
     df_scaled = pd.DataFrame(
-        scaler.fit_transform(df_na),
-        columns=df_na.columns,
-        index=df_na.index,
+        scaler.fit_transform(df_selected),
+        columns=df_selected.columns,
+        index=df_selected.index,
     )
-
-    print(f"Data preprocessing complete! {len(df) - len(df_scaled)} rows removed due to NaNs.\n")
-    return df_cleaned, df_scaled, df_na
+    df_original = df.loc[df_scaled.index]
+    
+    return df_scaled, df_original
 
 
 def train_som(df_scaled, som_name, som_dir, n_rows=10, n_columns=10):
@@ -117,8 +122,8 @@ def train_som(df_scaled, som_name, som_dir, n_rows=10, n_columns=10):
     return som
 
 def check_missing_combos(df,n_rows=10, n_columns=10):
-    row_values = range(10)  
-    col_values = range(10)  
+    row_values = range(n_rows)  
+    col_values = range(n_columns)  
     expected_combinations = set(itertools.product(row_values, col_values))
     actual_combinations = set(zip(df["row"], df["col"], strict=False))
     missing_combinations = expected_combinations - actual_combinations
@@ -131,25 +136,38 @@ def check_missing_combos(df,n_rows=10, n_columns=10):
 
 filepath = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet") 
 som_dir = os.path.expanduser("~/gpm_storm/SOM/trained_soms/")  
-som_name = "Test_SOM"  
+som_name = "strong_SOM"  
 n_rows, n_columns = 10, 10
+n_nodes = n_rows * n_columns
 
 df = pd.read_parquet(filepath) 
-vars = df.columns[:134]
+vars = [
+    "ICC_30_max", "ICC_40_max", "LCC_30_max", "LCC_40_max", "CC_40_count", "CC_30_count",
+    "P_max", "P_sum", "P_count", "MP_sum", "P_GT2_regions", "P_GT2_count", "P_GT10_regions",
+    "P_GT10_count", "P_GT50_regions", "P_GT50_count", "P_GT120_regions", "P_GT120_count",
+    "P_%_between_0_1", "P_%_between_5_10", "P_%_between_20_300"
+]
 
-df_cleaned, df_scaled, df_na = preprocess_data(df, vars)
-som = train_som(df_na, som_name, som_dir, n_rows, n_columns)
-bmus = som.bmus  
-
-df_bmu = df_na.copy()
+# df_cleaned, df_rounded, df_scaled, df_full_scaled = preprocess_data(df, vars)
+df_scaled, df_original = preprocess_data(df, vars)
+som = train_som(df_scaled, som_name, som_dir, n_rows, n_columns)
+bmus = som.bmus
+df_bmu = df_original.copy()
 df_bmu["row"], df_bmu["col"] = bmus[:, 0], bmus[:, 1]
-df_final = df.copy()
-df_final.loc[df_bmu.index, "row"] = df_bmu["row"]
-df_final.loc[df_bmu.index, "col"] = df_bmu["col"]
+missing_combinations = check_missing_combos(df_bmu,n_rows, n_columns)
 
-missing_combinations = check_missing_combos(df_final,n_rows, n_columns)
+# weights = som.codebook
+# weights_2d = weights.reshape((n_nodes, -1))
+# node_positions = [(r, c) for r in range(n_rows) for c in range(n_columns)]
+# X = df_full_scaled.to_numpy()
+# distances = cdist(X, weights_2d, metric="euclidean")
+# bmu_indices = np.argmin(distances, axis=1)
+# bmu_coords = np.array([node_positions[i] for i in bmu_indices])
+# df_full_bmu = df.copy()
+# df_full_bmu["row"] = bmu_coords[:, 0]
+# df_full_bmu["col"] = bmu_coords[:, 1]
+
 
 new_filepath = os.path.expanduser(f"~/gpm_storm/data/{som_name}_with_bmus.parquet")
-df_final.to_parquet(new_filepath)
-
-som = load_som(som_dir=som_dir, som_name=som_name)
+df_bmu.to_parquet(new_filepath)
+# som = load_som(som_dir=som_dir, som_name=som_name)

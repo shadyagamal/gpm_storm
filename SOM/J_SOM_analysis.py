@@ -239,7 +239,7 @@ def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean"):
 filepath = "/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet"
 df = pd.read_parquet(filepath)
 som_dir = os.path.expanduser("~/gpm_storm/SOM/trained_soms/")  
-som_name = "Test_SOM"
+som_name = "strong_SOM" 
 bmu_dir = os.path.expanduser(f"~/gpm_storm/data/{som_name}_with_bmus.parquet")
 figs_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}")
 os.makedirs(figs_dir, exist_ok=True)
@@ -250,8 +250,9 @@ df_bmu = pd.read_parquet(bmu_dir)
 som = load_som(som_dir=som_dir, som_name=som_name)
 bmus = som.bmus
 
-row_values = range(10)  
-col_values = range(10)  
+row_values = range(som._n_rows)
+col_values = range(som._n_columns)
+
 expected_combinations = set(itertools.product(row_values, col_values))
 actual_combinations = set(zip(df_bmu["row"], df_bmu["col"], strict=False))
 missing_combinations = expected_combinations - actual_combinations
@@ -280,7 +281,8 @@ plot_node_samples_and_maps(
 )
 
 # --- Plot Mean Variable per Node ---
-plot_mean_variable_per_node(
-    arr_df, save_dir=figs_dir, variable="P_mean"
-)
+for col in df_bmu.columns[:134]:
+    plot_mean_variable_per_node(
+        arr_df, save_dir=figs_dir, variable=col
+    )
 
