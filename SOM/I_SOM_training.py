@@ -14,6 +14,7 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from collections import Counter
 from scipy.stats import skew
+import matplotlib.pyplot as plt
 
 
 def bin_and_round_df(df):
@@ -21,7 +22,7 @@ def bin_and_round_df(df):
     rounded_df = pd.DataFrame(index=df.index)
     bin_edges = {}
     for col in df.columns:
-        hist, edges = np.histogram(df[col], bins="doane")
+        hist, edges = np.histogram(df[col], bins="auto")
         bin_idx = np.digitize(df[col], bins=edges, right=False) - 1
         bin_idx = np.clip(bin_idx, 0, len(edges) - 2)
         bin_edges[col] = edges
@@ -63,29 +64,28 @@ def preprocess_data(df, vars):
         "LCC_40_mean", "LCC_40_std", "ICC_40_mean", "ICC_40_std",
         "LCC_30_max", "ICC_30_max", "LCC_40_max", "ICC_40_max"]
     
-    
     for col in fill_zero_cols:
         if col in df_cleaned.columns:
             df_cleaned[col] = df_cleaned[col].fillna(0)
             
-    df_thresh = df_cleaned[df_cleaned["P_mean"]>1]
-    df_selected = df_thresh[vars]
-    df_selected = df_selected.dropna(axis=0)
-    
-    skew_vals = df_selected.apply(skew, nan_policy='omit')
+    df_selected = df_cleaned[vars]
+    df_rounded, _ = bin_and_round_df(df_selected)
+    df_thresh = df_rounded[df_rounded["P_mean"]>=1]
+
+    df_log = df_thresh.copy()
+    skew_vals = df_log.apply(skew, nan_policy='omit')
     skewed_cols = skew_vals[skew_vals > 0.75].index.tolist()
     for col in skewed_cols:
-        if (df_selected[col] >= 0).all():
-            df_selected[col] = np.log1p(df_selected[col])
+        if (df_log[col] >= 0).all():
+            df_log[col] = np.log1p(df_log[col])
             
     scaler = MinMaxScaler()
     df_scaled = pd.DataFrame(
-        scaler.fit_transform(df_selected),
-        columns=df_selected.columns,
-        index=df_selected.index,
+        scaler.fit_transform(df_log),
+        columns=df_log.columns,
+        index=df_log.index,
     )
-    df_original = df.loc[df_scaled.index]
-    
+    df_original = df.iloc[df_thresh.index]
     return df_scaled, df_original
 
 
@@ -134,15 +134,19 @@ def check_missing_combos(df,n_rows=10, n_columns=10):
     return missing_combinations
 
 
-filepath = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet") 
-som_dir = os.path.expanduser("~/gpm_storm/SOM/trained_soms/")  
-som_name = "strong_SOM"  
+filepath0 = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet") 
+filepath1 = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_1.parquet") 
+som_dir = os.path.expanduser("~/gpm_storm/data/trained_soms/")  
+som_name = "SOM_Pmean_>_1_uniform"  
 n_rows, n_columns = 10, 10
 n_nodes = n_rows * n_columns
 
-df = pd.read_parquet(filepath) 
+df0 = pd.read_parquet(filepath0) 
+df1 = pd.read_parquet(filepath1) 
+df = pd.concat([df0,df1], ignore_index=True)
+
 vars = [
-    "ICC_30_max", "ICC_40_max", "LCC_30_max", "LCC_40_max", "CC_40_count", "CC_30_count",
+    "ICC_30_max", "ICC_40_max", "LCC_30_max", "LCC_40_max", "CC_40_count", "CC_30_count", "P_mean",
     "P_max", "P_sum", "P_count", "MP_sum", "P_GT2_regions", "P_GT2_count", "P_GT10_regions",
     "P_GT10_count", "P_GT50_regions", "P_GT50_count", "P_GT120_regions", "P_GT120_count",
     "P_%_between_0_1", "P_%_between_5_10", "P_%_between_20_300"
@@ -168,6 +172,6 @@ missing_combinations = check_missing_combos(df_bmu,n_rows, n_columns)
 # df_full_bmu["col"] = bmu_coords[:, 1]
 
 
-new_filepath = os.path.expanduser(f"~/gpm_storm/data/{som_name}_with_bmus.parquet")
+new_filepath = os.path.expanduser(f"~/gpm_storm/data/df_with_bmus/{som_name}_with_bmus.parquet")
 df_bmu.to_parquet(new_filepath)
 # som = load_som(som_dir=som_dir, som_name=som_name)

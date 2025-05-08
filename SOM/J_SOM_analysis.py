@@ -30,6 +30,9 @@ from gpm_storm.som.io import (
 from gpm_storm.som.plot import (
     plot_images,
 )
+from collections import defaultdict
+import seaborn as sns
+from sklearn.feature_selection import f_regression
 
 def find_zarr_file_for_patch(row, zarr_directory, filename_pattern="*.zarr"):
     granule_id = str(row["gpm_granule_id"])
@@ -152,7 +155,22 @@ def plot_images_new(list_ds, ncols=5, figsize=(15, 5),
             )
     return fig
 
-
+def month_to_season(month):
+    if month in [12, 1, 2]:
+        return "Winter"
+    elif month in [3, 4, 5]:
+        return "Spring"
+    elif month in [6, 7, 8]:
+        return "Summer"
+    else:
+        return "Autumn"
+    
+season_palette = {
+    "Winter": "blue",
+    "Spring": "green",
+    "Summer": "red",
+    "Autumn": "orange"
+}    
 
 def plot_node_samples_and_maps(arr_df, df, zarr_directory, save_dir, variable="precipRateNearSurface", 
                                 num_images=25, n_rows=10, n_cols=10):
@@ -187,25 +205,21 @@ def plot_node_samples_and_maps(arr_df, df, zarr_directory, save_dir, variable="p
             if not df_subset.empty:
                 df_subset["time"] = pd.to_datetime(df_subset["time"])
                 df_subset["month"] = df_subset["time"].dt.month
+                df_subset["season"] = df_subset["month"].apply(month_to_season)
+               
 
-                fig, ax = plt.subplots(figsize=(12, 6), subplot_kw={"projection": ccrs.PlateCarree()})
+                fig, ax = plt.subplots(figsize=(15, 8), subplot_kw={"projection": ccrs.PlateCarree()})
                 plot_cartopy_background(ax)
-                sc = ax.scatter(
-                    df_subset["lon"], df_subset["lat"], 
-                    transform=ccrs.PlateCarree(), c=df_subset["month"], s=2
-                )
-    
-                pycolorbar.plot_colorbar(p=sc, ax=ax, orientation="vertical", label="month") #pad=0.02))
-                # cbar = plt.colorbar(sc, ax=ax, orientation="vertical", pad=0.02)
-                # cbar.set_label("Month")
-
+                sns.scatterplot(data=df_subset, x="lon", y="lat", palette=season_palette, 
+                                     hue="season", s=10, edgecolor=None)
+                ax.legend(title="Season", bbox_to_anchor=(1.01, 1), loc="upper left", borderaxespad=0)
                 map_path = os.path.join(save_dir, f"node_{row}_{col}_map.png")
                 fig.savefig(map_path)
                 plt.close(fig)
 
             
             
-def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean"):
+def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean", high_q=0.99, low_q=0.01, fig=True):
     mean_values = np.full((10, 10), np.nan)
 
     for row in range(10):
@@ -214,33 +228,50 @@ def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean"):
             if not df_node.empty:
                 mean_val = df_node[variable].mean()
                 mean_values[row, col] = mean_val
+                
+    valid_means = mean_values[~np.isnan(mean_values)]
+    high_thresh = np.quantile(valid_means, high_q)
+    low_thresh = np.quantile(valid_means, low_q)
 
-    plt.figure(figsize=(8, 8))
-    cmap = plt.cm.viridis
-    masked_array = np.ma.masked_invalid(mean_values)
-
-    plt.imshow(masked_array, cmap=cmap, origin="upper")
-    cbar = plt.colorbar()
-    cbar.set_label(f"Mean {variable}")
-    plt.title(f"Mean {variable} per SOM Node")
-    plt.xlabel("SOM Column")
-    plt.ylabel("SOM Row")
-    plt.xticks(np.arange(10))
-    plt.yticks(np.arange(10))
-    plt.grid(False)
-
-    mean_path = os.path.join(save_dir, f"som_mean_{variable}.png")
-    plt.savefig(mean_path, dpi=300)
-    plt.show()
+    for row in range(10):
+        for col in range(10):
+            val = mean_values[row, col]
+            if np.isnan(val):
+                continue
+            if val >= high_thresh:
+                node_characteristics[(row, col)].append(f"high {variable}")
+            if val <= low_thresh:
+                node_characteristics[(row, col)].append(f"low {variable}")
+    if fig==True:
+        plt.figure(figsize=(8, 8))
+        cmap = plt.cm.viridis
+        masked_array = np.ma.masked_invalid(mean_values)
+    
+        plt.imshow(masked_array, cmap=cmap, origin="upper")
+        cbar = plt.colorbar()
+        cbar.set_label(f"Mean {variable}")
+        plt.title(f"Mean {variable} per SOM Node")
+        plt.xlabel("SOM Column")
+        plt.ylabel("SOM Row")
+        plt.xticks(np.arange(10))
+        plt.yticks(np.arange(10))
+        plt.grid(False)
+    
+        mean_path = os.path.join(save_dir, f"som_mean_{variable}.png")
+        plt.savefig(mean_path, dpi=300)
+        plt.close()
     return None
 
 
 # --- Config ---
-filepath = "/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet"
-df = pd.read_parquet(filepath)
-som_dir = os.path.expanduser("~/gpm_storm/SOM/trained_soms/")  
-som_name = "strong_SOM" 
-bmu_dir = os.path.expanduser(f"~/gpm_storm/data/{som_name}_with_bmus.parquet")
+# filepath0 = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet") 
+# filepath1 = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_1.parquet") 
+# df0 = pd.read_parquet(filepath0) 
+# df1 = pd.read_parquet(filepath1) 
+# df = pd.concat([df0,df1])
+som_dir = os.path.expanduser("~/gpm_storm/data/trained_soms/")  
+som_name = "SOM_Pmean_>_1_uniform"
+bmu_dir = os.path.expanduser(f"~/gpm_storm/data/df_with_bmus/{som_name}_with_bmus.parquet")
 figs_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}")
 os.makedirs(figs_dir, exist_ok=True)
 zarr_directory = "/ltenas2/data/GPM_STORM_DB/zarr"
@@ -281,8 +312,50 @@ plot_node_samples_and_maps(
 )
 
 # --- Plot Mean Variable per Node ---
+node_characteristics = defaultdict(list)
 for col in df_bmu.columns[:134]:
     plot_mean_variable_per_node(
-        arr_df, save_dir=figs_dir, variable=col
-    )
+        arr_df, save_dir=figs_dir, variable=col, fig=True)
 
+# --- Grouped Analysis ---
+grouped = df_bmu.groupby(['row', 'col'])
+
+summary = grouped.mean(numeric_only=True)
+summary_std = grouped.std(numeric_only=True)
+counts = grouped.size().unstack(fill_value=0)
+
+
+# Per node
+node_df = df_bmu[(df_bmu['row'] == 9) & (df_bmu['col'] == 4)]
+print(f"{len(node_df)} events in node (3, 9)")
+vars = node_df.columns[:134]
+
+df_pivot = node_df.pivot_table(index=['lat', 'lon'], values=vars).dropna(axis=1)
+f_lat, _ = f_regression(df_pivot, df_pivot.index.get_level_values('lat'))
+f_lon, _ = f_regression(df_pivot, df_pivot.index.get_level_values('lon'))
+spatial_dependency = pd.DataFrame({'var': df_pivot.columns, 'lat_score': f_lat, 'lon_score': f_lon})
+spatial_dependency['combined_score'] = spatial_dependency['lat_score'] + spatial_dependency['lon_score']
+
+top_vars = spatial_dependency.sort_values('combined_score', ascending=False).head(8)['var']
+
+for var in top_vars[3:]:
+    fig, ax = plt.subplots(figsize=(10, 5), subplot_kw={"projection": ccrs.PlateCarree()})
+    plot_cartopy_background(ax)
+    sns.scatterplot(data=node_df, x="lon", y="lat", palette="viridis", 
+                         hue=var, s=10, edgecolor=None)
+    ax.legend(title=f"{var}", bbox_to_anchor=(1.01, 1), loc="upper left", borderaxespad=0)
+    plt.title(f'Spatial distribution of {var}')
+    plt.show()
+    
+
+
+
+features = ["P_mean", "P_max", "P_count", "REFC_mean", "REFCH_mean", "CC_30_count", "lon", "lat"]
+for var in features:
+    plt.figure(figsize=(6, 3))
+    sns.kdeplot(df_bmu[var], label="All data", linewidth=2)
+    sns.kdeplot(node_df[var], label="Node (12,5)", linewidth=2)
+    plt.title(f"Distribution of {var}")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()

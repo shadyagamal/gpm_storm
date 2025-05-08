@@ -57,18 +57,10 @@ summary = grouped.mean(numeric_only=True)
 summary_std = grouped.std(numeric_only=True)
 counts = grouped.size().unstack(fill_value=0)
 
-
-mean_reflect = grouped['lat'].mean().unstack()
-sns.heatmap(mean_reflect, cmap="viridis", annot=False)
-plt.title("Mean Max Reflectivity per SOM node")
-plt.xlabel("Column")
-plt.ylabel("Row")
-plt.show()
-
-
 # Per node
 node_df = df_bmu[(df_bmu['row'] == 1) & (df_bmu['col'] == 0)]
 print(f"{len(node_df)} events in node (3, 9)")
+
 
 
 features = ["P_mean", "P_max", "P_count", "REFC_mean", "REFCH_mean", "CC_30_count", "lon", "lat"]
@@ -88,14 +80,14 @@ plt.title("Correlations inside node (12,5)")
 plt.show()
 
 
-plt.figure(figsize=(6, 4))
-plt.scatter(df_bmu["lon"], df_bmu["lat"], s=5, alpha=0.1, label="All")
-plt.scatter(node_df["lon"], node_df["lat"], s=10, alpha=0.9, label="Node (12,5)")
-plt.title("Geographical distribution")
-plt.xlabel("Longitude")
-plt.ylabel("Latitude")
-plt.legend()
-plt.show()
+# plt.figure(figsize=(6, 4))
+# plt.scatter(df_bmu["lon"], df_bmu["lat"], s=5, alpha=0.1, label="All")
+# plt.scatter(node_df["lon"], node_df["lat"], s=10, alpha=0.9, label="Node (12,5)")
+# plt.title("Geographical distribution")
+# plt.xlabel("Longitude")
+# plt.ylabel("Latitude")
+# plt.legend()
+# plt.show()
 
 # Cluster Composition Analysis
 # For each SOM node, what are the dominant UMAP+KMeans clusters?
