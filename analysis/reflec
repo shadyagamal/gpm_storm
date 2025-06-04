@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed May 21 10:48:43 2025
+
+@author: gamal
+"""
+import datetime
+import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+from xhistogram.xarray import histogram
+from matplotlib.colors import Normalize
+import gpm
+import os
+import matplotlib.patches as patches
+import pandas as pd
+import pickle
+from scipy.ndimage import label
+
+
+# --- Load Data ------
+som_name = "SOM_Pmean_>_1_with_random_init"  
+bmu_dir = os.path.expanduser(f"~/gpm_storm/data/df_with_bmus/{som_name}_with_bmus.parquet")
+figs_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}/CFAD")
+os.makedirs(figs_dir, exist_ok=True)
+df_bmu = pd.read_parquet(bmu_dir)
+
+actual_combinations = set(zip(df_bmu["row"], df_bmu["col"], strict=False))
+
+
+def compute_cfad(node_df, top_pixels=None):
+    reflectivity_bins = np.arange(10, 60, 0.5)
+    relative_height_bins = np.arange(-7000, 20000, 250)
+
+    cfad_total = None
+    cfad_conv = None
+    cfad_strat = None
+    cfad_other = None
+    cfad_total_top = None
+    wcc_flags = []
+    
+    for i in tqdm(range(len(node_df)//2)):
+        sample = node_df.iloc[i]
+        try:
+            ds = gpm.open_dataset(
+                product="2A-DPR",
+                product_type="RS",
+                version=7,
+                start_time=sample["time"] - datetime.timedelta(minutes=1),
+                end_time=sample["time"] + datetime.timedelta(minutes=1),
+                scan_mode="FS",
+                chunks={},
+                variables=["zFactorFinal", "height", "typePrecip", "heightZeroDeg"]
+                )
+            ds_patch = ds.gpm.sel(gpm_id=slice(sample["gpm_id_start"], sample["gpm_id_end"])).compute()
+            
+            # Footprints conv-strat
+            ds_patch["flagPrecipitationType"] = ds_patch.gpm.retrieve(
+                "flagPrecipitationType", method="major_rain_type")
+            ds_patch_footprints = ds_patch.stack(footprints=["cross_track", "along_track"])
+            
+            ds_dict = {
+                "total": ds_patch_footprints,
+                "conv": ds_patch_footprints.isel(footprints=(ds_patch_footprints["flagPrecipitationType"] == 2)),
+                "strat": ds_patch_footprints.isel(footprints=(ds_patch_footprints["flagPrecipitationType"] == 1)),
+                "other": ds_patch_footprints.isel(footprints=(ds_patch_footprints["flagPrecipitationType"] == 3))
+            }
+    
+            for cat, ds_dpr in ds_dict.items():
+                if ds_dpr.footprints.size == 0:
+                    continue  
+                
+                z_ku = ds_dpr["zFactorFinal"].sel(radar_frequency="Ku")
+                height = ds_dpr["height"]
+                zero_deg = ds_dpr["heightZeroDeg"]
+                rel_height = height - zero_deg.broadcast_like(height)
+                rel_height.name = 'relheight'
+                
+                cfad = histogram(
+                    z_ku, rel_height,
+                    bins=[reflectivity_bins, relative_height_bins],
+                    density=True
+                ).transpose("relheight_bin", "zFactorFinal_bin")
+                
+                if cat == "total":
+                    cfad_total = cfad if cfad_total is None else cfad_total + cfad
+                    
+                    # -------- WCC---------
+                    heights = height.isel(footprints=0).values
+                    target_height = np.clip(sample["ETH30_max"], heights.min(), heights.max())
+                    closest_idx = np.argmin(np.abs(heights - target_height))
+                    z_slice = z_ku.isel(range=closest_idx)
+                    z_slice_2d = z_slice.unstack("footprints")
+                    wcc_moderate, wcc_strong = compute_wcc_flags(z_slice_2d)
+                    
+                    wcc_flags.append({
+                        "index": sample.name,
+                        "wcc_moderate": wcc_moderate,
+                        "wcc_strong": wcc_strong
+                    })
+                    
+                elif cat == "conv":
+                    cfad_conv = cfad if cfad_conv is None else cfad_conv + cfad
+                elif cat == "strat":
+                    cfad_strat = cfad if cfad_strat is None else cfad_strat + cfad
+                elif cat == "other":
+                    cfad_other = cfad if cfad_other is None else cfad_other + cfad
+            
+            if top_pixels is not None:
+                ds_dpr =  ds_patch_footprints.isel(footprints=(ds_patch_footprints["flagPrecipitationType"].isin([1, 2, 3])))
+                if ds_dpr.footprints.size == 0:
+                    continue
+                z_ku = ds_dpr["zFactorFinal"].sel(radar_frequency="Ku")
+                height = ds_dpr["height"]
+                zero_deg = ds_dpr["heightZeroDeg"]
+                rel_height = height - zero_deg.broadcast_like(height)
+                rel_height.name = "relheight"
+                
+
+                # Select top
+                max_refl = z_ku.max(dim="range")
+                top5_indices = np.argsort(max_refl.values)[::-1][:top_pixels]
+                z_ku_top5 = z_ku.isel(footprints=top5_indices)
+                rel_height_top5 = rel_height.isel(footprints=top5_indices)
+
+                cfad = histogram(
+                    z_ku_top5,
+                    rel_height_top5,
+                    bins=[reflectivity_bins, relative_height_bins],
+                    density=False
+                ).transpose("relheight_bin", "zFactorFinal_bin")
+                
+                cfad_total_top = cfad if cfad_total_top is None else cfad_total_top + cfad
+                
+        except Exception as e:
+            print(e)
+            continue
+    return cfad_total, cfad_conv, cfad_strat, cfad_other, cfad_total_top, wcc_flags
+
+
+
+def compute_wcc_flags(z_slice):
+    pixel_area_km2=25
+    
+    mask_30dbz = z_slice > 30
+    areas_30 = mask_30dbz.sum().item() * pixel_area_km2
+    wcc_moderate = areas_30 >= 800
+
+    mask_40dbz = z_slice > 40
+    area_strong = mask_40dbz.sum().item() * pixel_area_km2
+    wcc_strong = area_strong >= 1000
+
+    return wcc_moderate, wcc_strong
+
+
+
+cfad_totals = {}
+cfad_convs = {}
+cfad_strats = {}
+cfad_others = {}
+cfad_total_tops = {}
+wcc_flagss = {}
+
+for node in actual_combinations:
+    row, col = node
+    node_df = df_bmu[(df_bmu["row"] == row) & (df_bmu["col"] == col)].copy()
+    print(f"{len(node_df)} events in node {node}")
+    
+    cfad_total, cfad_conv, cfad_strat, cfad_other, cfad_total_top, wcc_flags = compute_cfad(node_df, top_pixels=5)
+
+    vmin = min( cfad_total.where(cfad_total > 0).min().item(),
+                cfad_conv.where(cfad_conv > 0).min().item(),
+                cfad_strat.where(cfad_strat > 0).min().item())
+    vmax = max(cfad_total.max().item(),
+                cfad_conv.max().item(),
+                cfad_strat.max().item())
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
+    cfad_total.where(cfad_total > 0).plot.imshow(
+        ax=axes[0], x="zFactorFinal_bin", y="relheight_bin", origin="lower",
+        cmap="Spectral_r", extend="both", vmin=vmin, vmax=vmax)
+    axes[0].set_title(f"Total CFAD: node({node[0]},{node[1]})")
+
+    cfad_conv.where(cfad_conv > 0).plot.imshow(
+        ax=axes[1], x="zFactorFinal_bin", y="relheight_bin", origin="lower",
+        cmap="Spectral_r", extend="both", vmin=vmin, vmax=vmax)
+    axes[1].set_title("Convective CFAD")
+
+    cfad_strat.where(cfad_strat > 0).plot.imshow(
+        ax=axes[2], x="zFactorFinal_bin", y="relheight_bin", origin="lower",
+        cmap="Spectral_r", extend="both", vmin=vmin, vmax=vmax)
+    axes[2].set_title("Stratiform CFAD")
+
+    plt.tight_layout()
+    cfad_path = os.path.join(figs_dir, f"CFAD_Node{node}.png")
+    plt.savefig(cfad_path, dpi=300)
+    
+    
+    
+    
+    cfad_totals[row,col] = cfad_total
+    cfad_convs[row,col] = cfad_conv
+    cfad_strats[row,col] = cfad_strat
+    cfad_others[row,col] = cfad_other
+    cfad_total_tops[row,col] = cfad_total_top
+    wcc_flagss[row,col] = wcc_flags
+    
+
+    
+strong_flags = []
+
+for (row, col), flags_list in wcc_flagss.items():
+    for flags in flags_list: 
+        if flags["wcc_moderate"]==True:
+            strong_flags.append((row, col, flags["index"]))
+    
+    
+    
+
+# SAVE
+with open(os.path.join(figs_dir,"cfad_totals.pkl"), "wb") as f:
+    pickle.dump(cfad_totals, f)
+with open(os.path.join(figs_dir,"cfad_convs.pkl"), "wb") as f:
+    pickle.dump(cfad_convs, f)
+with open(os.path.join(figs_dir,"cfad_strats.pkl"), "wb") as f:
+    pickle.dump(cfad_strats, f)
+with open(os.path.join(figs_dir,"cfad_total_tops.pkl"), "wb") as f:
+    pickle.dump(cfad_total_tops, f)
+with open(os.path.join(figs_dir,"cfad_others.pkl"), "wb") as f:
+    pickle.dump(cfad_others, f)
+with open(os.path.join(figs_dir,"wcc_flagss.pkl"), "wb") as f:
+    pickle.dump(wcc_flagss, f)
+    
+    
+    
+# LOAD
+with open(os.path.join(figs_dir,"cfad_totals.pkl"), "rb") as f:
+    cfad_totals = pickle.load(f)
+# with open(os.path.join(figs_dir,"cfad_convs.pkl"), "rb") as f:
+#     cfad_convs = pickle.load(f)
+# with open(os.path.join(figs_dir,"cfad_strats.pkl"), "rb") as f:
+#     cfad_strats = pickle.load(f)
+# with open(os.path.join(figs_dir,"cfad_total_tops.pkl"), "rb") as f:
+#     cfad_total_tops = pickle.load(f)

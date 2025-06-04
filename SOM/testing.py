@@ -60,15 +60,19 @@ def check_missing_combos(df,n_rows=10, n_columns=10):
     return missing_combinations
 
 
-filepath = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet") 
-som_dir = os.path.expanduser("~/gpm_storm/SOM/trained_soms/")  
+filepath0 = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet") 
+filepath1 = ("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_1.parquet") 
+som_dir = os.path.expanduser("~/gpm_storm/data/trained_soms/")  
 som_name = "testing_SOM"  
 n_rows, n_columns = 10, 10
 n_nodes = n_rows * n_columns
 
-df = pd.read_parquet(filepath) 
+df0 = pd.read_parquet(filepath0) 
+df1 = pd.read_parquet(filepath1) 
+df = pd.concat([df0,df1])
+
 vars = [
-    "ICC_30_max", "ICC_40_max", "LCC_30_max", "LCC_40_max", "CC_40_count", "CC_30_count",
+    "ICC_30_max", "ICC_40_max", "LCC_30_max", "LCC_40_max", "CC_40_count", "CC_30_count","P_mean",
     "P_max", "P_sum", "P_count", "MP_sum", "P_GT2_regions", "P_GT2_count", "P_GT10_regions",
     "P_GT10_count", "P_GT50_regions", "P_GT50_count", "P_GT120_regions", "P_GT120_count",
     "P_%_between_0_1", "P_%_between_5_10", "P_%_between_20_300"
@@ -92,14 +96,14 @@ fill_zero_cols = [
 
 for col in fill_zero_cols:
     if col in df_cleaned.columns:
-        df[col] = df_cleaned[col].fillna(0)
+        df_cleaned[col] = df_cleaned[col].fillna(0)
 
-df_cleaned = df_cleaned[df_cleaned["P_mean"]>1]
+# df_cleaned = df_cleaned[df_cleaned["P_mean"]<1]
 
 df_selected = df_cleaned[vars]
 # df_selected = df_selected.dropna(axis=0)
 
-df_selected[df_selected.columns].hist(bins=50, figsize=(20, 15))
+df_selected[df_selected.columns].hist(bins=50, figsize=(20, 15), log=True)
 plt.tight_layout()
 plt.show()
 

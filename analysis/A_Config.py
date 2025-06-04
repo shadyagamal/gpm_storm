@@ -14,12 +14,14 @@ def main():
     """
     username = "shadya.gamal@gmail.com"  # likely your mail
     password = "shadya.gamal@gmail.com"  # likely your mail
-    gpm_base_dir = "/home/gamal/data/GPM"  # path to the directory where to download the data
+    gpm_base_dir = "/ltenas2/data/GPM"  # path to the directory where to download the data
 
-    gpm.define_configs(gpm_username=username, gpm_password=password, gpm_base_dir=gpm_base_dir)
+    gpm.define_configs(username_pps=username, password_pps=password, base_dir=gpm_base_dir)
 
     print("Configuration completed.")
 
 
 if __name__ == "__main__":
     main()
+
+
