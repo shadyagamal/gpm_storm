@@ -1,0 +1,303 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed May 21 11:18:08 2025
+
+@author: gamal
+"""
+
+
+import datetime
+import numpy as np
+from tqdm import tqdm
+from xhistogram.xarray import histogram
+import gpm
+
+
+def compute_cfad_top5(node_df):
+    reflectivity_bins = np.arange(10, 60, 0.5)
+    relative_height_bins = np.arange(-7000, 20000, 250)
+    
+    cfad_total = None
+    cfad_conv = None
+    cfad_strat = None
+    
+    for i in tqdm(range(15)):
+        sample = node_df.iloc[i]
+        try:
+            ds = gpm.open_dataset(
+                product="2A-DPR",
+                product_type="RS",
+                version=7,
+                start_time=sample["time"] - datetime.timedelta(minutes=1),
+                end_time=sample["time"] + datetime.timedelta(minutes=1),
+                scan_mode="FS",
+                chunks={},
+                variables=["zFactorFinal", "height", "typePrecip", "heightZeroDeg"])
+            ds_patch = ds.gpm.sel(gpm_id=slice(sample["gpm_id_start"], sample["gpm_id_end"])).compute()
+            
+            ds_patch["flagPrecipitationType"] = ds_patch.gpm.retrieve(
+                "flagPrecipitationType", method="major_rain_type")
+            ds_patch_footprints = ds_patch.stack(footprints=["cross_track", "along_track"])
+            
+            ds_dict = {
+                "total": ds_patch_footprints.isel(footprints=(ds_patch_footprints["flagPrecipitationType"].isin([1, 2, 3]))),
+                "conv": ds_patch_footprints.isel(footprints=(ds_patch_footprints["flagPrecipitationType"] == 1)),
+                "strat": ds_patch_footprints.isel(footprints=(ds_patch_footprints["flagPrecipitationType"].isin([2, 3])))
+            }
+    
+            for cat, ds_dpr in ds_dict.items():
+                if ds_dpr.footprints.size == 0:
+                    continue  
+                
+                z_ku = ds_dpr["zFactorFinal"].sel(radar_frequency="Ku")
+                height = ds_dpr["height"]
+                zero_deg = ds_dpr["heightZeroDeg"]
+
+                # Compute relative height BEFORE stacking
+                rel_height = height - zero_deg.broadcast_like(height)
+                rel_height.name = "relheight"
+
+                # Select top 5
+                max_refl = z_ku.max(dim="range")
+                top5_indices = np.argsort(max_refl.values)[::-1][:5]
+
+                z_ku_top5 = z_ku.isel(footprints=top5_indices)
+                rel_height_top5 = rel_height.isel(footprints=top5_indices)
+
+                cfad = histogram(
+                    z_ku_top5,
+                    rel_height_top5,
+                    bins=[reflectivity_bins, relative_height_bins],
+                    density=False
+                ).transpose("relheight_bin", "zFactorFinal_bin")
+                
+                if cat == "total":
+                    cfad_total = cfad if cfad_total is None else cfad_total + cfad
+                elif cat == "conv":
+                    cfad_conv = cfad if cfad_conv is None else cfad_conv + cfad
+                elif cat == "strat":
+                    cfad_strat = cfad if cfad_strat is None else cfad_strat + cfad
+            
+        except Exception as e:
+            print(e)
+            continue
+    return cfad_total, cfad_conv, cfad_strat
+
+
+def compute_cfad(node_df):
+    # Bins
+    reflectivity_bins = np.arange(10, 60, 0.5)
+    # height_bins = np.arange(0, 15_000, 250)
+    relative_height_bins = np.arange(-7000, 10000, 250)
+    # relative_height_centers = 0.5 * (relative_height_bins[:-1] + relative_height_bins[1:])
+    
+    # Accumulator
+    cfad_total = None
+    cfad_conv = None
+    cfad_strat = None
+    for i in tqdm(range(0, min(100,len(node_df)))):
+        sample = node_df.iloc[i]
+        try:
+            ds = gpm.open_dataset(
+                product="2A-DPR",
+                product_type="RS",
+                version=7,
+                start_time=sample["time"] - datetime.timedelta(minutes=1),
+                end_time=sample["time"] + datetime.timedelta(minutes=1),
+                scan_mode="FS",
+                chunks={},
+                variables=["zFactorFinal", "height", "typePrecip", "heightZeroDeg"])
+            ds_patch = ds.gpm.sel(gpm_id=slice(sample["gpm_id_start"], sample["gpm_id_end"])).compute()
+            
+            # Footprints conv-strat
+            ds_patch["flagPrecipitationType"] = ds_patch.gpm.retrieve(
+                "flagPrecipitationType", method="major_rain_type")
+            ds_patch_footprints = ds_patch.stack(footprints=["cross_track", "along_track"])
+            
+            ds_dict = {
+                "total": ds_patch_footprints,
+                "conv": ds_patch_footprints.isel(footprints=(ds_patch_footprints["flagPrecipitationType"] == 1)),
+                "strat": ds_patch_footprints.isel(footprints=(ds_patch_footprints["flagPrecipitationType"].isin([2, 3])))
+            }
+    
+            for cat, ds_dpr in ds_dict.items():
+                if ds_dpr.footprints.size == 0:
+                    continue  
+                
+                z_ku = ds_dpr["zFactorFinal"].sel(radar_frequency="Ku")
+                height = ds_dpr["height"]
+                zero_deg = ds_dpr["heightZeroDeg"]
+                rel_height = height - zero_deg.broadcast_like(height)
+                rel_height.name = 'relheight'
+                
+                cfad = histogram(
+                    z_ku, rel_height,
+                    bins=[reflectivity_bins, relative_height_bins],
+                    density=True
+                ).transpose("relheight_bin", "zFactorFinal_bin")
+                
+                if cat == "total":
+                    cfad_total = cfad if cfad_total is None else cfad_total + cfad
+                elif cat == "conv":
+                    cfad_conv = cfad if cfad_conv is None else cfad_conv + cfad
+                elif cat == "strat":
+                    cfad_strat = cfad if cfad_strat is None else cfad_strat + cfad
+            
+        except Exception as e:
+            print(e)
+            continue
+    return cfad_total, cfad_conv, cfad_strat
+
+
+
+
+def compute_cfad_top5(node_df, top=5):
+    reflectivity_bins = np.arange(10, 60, 0.5)
+    relative_height_bins = np.arange(-7000, 20000, 250)
+    cfad_total_top = None
+    
+    for i in tqdm(range(15)):
+        sample = node_df.iloc[i]
+        try:
+            ds = gpm.open_dataset(
+                product="2A-DPR",
+                product_type="RS",
+                version=7,
+                start_time=sample["time"] - datetime.timedelta(minutes=1),
+                end_time=sample["time"] + datetime.timedelta(minutes=1),
+                scan_mode="FS",
+                chunks={},
+                variables=["zFactorFinal", "height", "typePrecip", "heightZeroDeg"])
+            ds_patch = ds.gpm.sel(gpm_id=slice(sample["gpm_id_start"], sample["gpm_id_end"])).compute()
+            
+            ds_patch["flagPrecipitationType"] = ds_patch.gpm.retrieve(
+                "flagPrecipitationType", method="major_rain_type")
+            ds_patch_footprints = ds_patch.stack(footprints=["cross_track", "along_track"])
+            
+            ds_dpr =  ds_patch_footprints.isel(footprints=(ds_patch_footprints["flagPrecipitationType"].isin([1, 2, 3])))
+            z_ku = ds_dpr["zFactorFinal"].sel(radar_frequency="Ku")
+            height = ds_dpr["height"]
+            zero_deg = ds_dpr["heightZeroDeg"]
+            rel_height = height - zero_deg.broadcast_like(height)
+            rel_height.name = "relheight"
+
+            # Select top 5
+            max_refl = z_ku.max(dim="range")
+            top5_indices = np.argsort(max_refl.values)[::-1][:top]
+            z_ku_top5 = z_ku.isel(footprints=top5_indices)
+            rel_height_top5 = rel_height.isel(footprints=top5_indices)
+
+            cfad = histogram(
+                z_ku_top5,
+                rel_height_top5,
+                bins=[reflectivity_bins, relative_height_bins],
+                density=True
+            ).transpose("relheight_bin", "zFactorFinal_bin")
+            
+            cfad_total_top = cfad if cfad_total_top is None else cfad_total_top + cfad
+        except Exception as e:
+            print(e)
+            continue
+    return cfad_total_top
+
+
+def plot_10x10_cfad(cfad_totals, cfad_convs, cfad_strats, cfad_path):
+    nrows, ncols = 10, 10 
+    figsize = (15, 15)
+    
+    fig_total, axes_total = plt.subplots(nrows, ncols, figsize=figsize, sharex=True, sharey=True)
+    fig_conv, axes_conv = plt.subplots(nrows, ncols, figsize=figsize, sharex=True, sharey=True)
+    fig_strat, axes_strat = plt.subplots(nrows, ncols, figsize=figsize, sharex=True, sharey=True)
+    
+    reflectivity_ticks = np.arange(10, 70, 20)
+    relative_height_ticks = np.arange(-7000, 10000, 2000)
+    relative_height_ticks_major = np.arange(-5000, 10001, 5000)
+    zmin, zmax = 10, 60
+    hmin, hmax = -7000, 10000
+    
+    for row, col in actual_combinations:
+        i, j = row, col
+        ax_t = axes_total[i, j]
+        ax_c = axes_conv[i, j]
+        ax_s = axes_strat[i, j]
+        
+        vmin = min(cfad_totals[(i, j)].where(cfad_totals[(i, j)] > 0).min().item(),
+                    cfad_convs[(i, j)].where(cfad_convs[(i, j)] > 0).min().item(),
+                   cfad_strats[(i, j)].where(cfad_strats[(i, j)] > 0).min().item())
+        vmax = max(cfad_totals[(i, j)].max().item(),
+                   cfad_convs[(i, j)].max().item(),
+                   cfad_strats[(i, j)].max().item())
+        
+        for ax, cfad in zip([ax_t, ax_c, ax_s], 
+                            [cfad_totals[(i, j)], cfad_convs[(i, j)], cfad_strats[(i, j)]]):
+    
+            cfad.where(cfad > 0).plot.imshow(
+                ax=ax, x="zFactorFinal_bin", y="relheight_bin", origin="lower",
+                cmap="Spectral_r", vmin=vmin, vmax=vmax, add_colorbar=False,  add_labels=False)
+            ax.set_title(f"({i},{j})", fontsize=10)
+            ax.set_xticks(reflectivity_ticks)
+            ax.set_yticks(relative_height_ticks)
+            ax.set_xlim(zmin, zmax)
+            ax.set_ylim(hmin, hmax)
+            ax.tick_params(axis="both", which="both", labelsize=6)
+            ax.tick_params(which="minor", left=False)
+            ax.grid()
+            ax.add_patch(patches.Rectangle((0, 0), 1, 1, transform=ax_s.transAxes, edgecolor='black', facecolor='none'))
+    
+    
+    for fig, cfad_type in zip([fig_total, fig_conv, fig_strat], ["Total", "Convective", "Stratiform"]):
+        fig.suptitle(f"{cfad_type} CFADs by Node", fontsize=16)
+        fig.tight_layout()
+        cfad_path = os.path.join(figs_dir, f"{cfad_type}_CFADs_10x10.png")
+        fig.savefig(cfad_path, dpi=300)
+        plt.close(fig)
+
+# node_df = df_bmu[(df_bmu["row"] == 1) & (df_bmu["col"] == 0)]
+# cfad_total, cfad_conv, cfad_strat = compute_cfad(node_df)
+
+# vmin = min(cfad_total.where(cfad_total > 0).min().item(),
+#            cfad_conv.where(cfad_conv > 0).min().item(),
+#            cfad_strat.where(cfad_strat > 0).min().item())
+# vmax = max(cfad_total.max().item(),
+#            cfad_conv.max().item(),
+#            cfad_strat.max().item())
+
+# fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
+
+# cfad_total.where(cfad_total > 0).plot.imshow(
+#     ax=axes[0], x="zFactorFinal_bin", y="relheight_bin", origin="lower",
+#     cmap="Spectral_r", extend="both", vmin=vmin, vmax=vmax)
+# axes[0].set_title(f"Total CFAD: node({node[0]},{node[1]})")
+
+# cfad_conv.where(cfad_conv > 0).plot.imshow(
+#     ax=axes[1], x="zFactorFinal_bin", y="relheight_bin", origin="lower",
+#     cmap="Spectral_r", extend="both", vmin=vmin, vmax=vmax)
+# axes[1].set_title("Convective CFAD")
+
+# cfad_strat.where(cfad_strat > 0).plot.imshow(
+#     ax=axes[2], x="zFactorFinal_bin", y="relheight_bin", origin="lower",
+#     cmap="Spectral_r", extend="both", vmin=vmin, vmax=vmax)
+# axes[2].set_title("Stratiform CFAD")
+
+# plt.tight_layout()
+# plt.show()   
+
+
+
+# fig, ax = plt.subplots(1, 1, figsize=(6, 5))
+# cfad_total_top.where(cfad_total_top > 0).plot.imshow(
+#     ax=ax,
+#     x="zFactorFinal_bin",
+#     y="relheight_bin",
+#     origin="lower",
+#     cmap="Spectral_r",
+#     extend="both",
+# )
+# ax.set_title(f"Total CFAD: node({node[0]},{node[1]})")
+
+# plt.tight_layout()
+# cfad_path = os.path.join(figs_dir, f"CFAD_top_Node{node}.png")
+# plt.savefig(cfad_path, dpi=300)
+# plt.show()
+# plt.close(fig)
