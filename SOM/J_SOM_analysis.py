@@ -23,7 +23,11 @@ from collections import defaultdict
 import seaborn as sns
 from sklearn.feature_selection import f_regression
 from kgcpy import *
-
+import datetime
+from matplotlib.colors import LogNorm, Normalize
+from xhistogram.xarray import histogram
+from tqdm import tqdm
+import pickle 
 
 # --- CONSTANTS ---
 SEASON_PALETTE = {
@@ -87,6 +91,9 @@ def build_som_patch_array(df, som, zarr_directory, variable="precipRateNearSurfa
                 arr_ds[row, col] = patch_ds
 
     return arr_df, arr_ds
+
+
+
 
 
 # --- PLOTTING ---
@@ -213,16 +220,32 @@ def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean", high_q=0.99
 
 
 # --- Config ---
-som_name = "SOM_Pmean_>_1_withP_GT120_mean"  
+som_name = "SOM_Pmean_>_1_with_random_init"  
 som_dir = os.path.expanduser("~/gpm_storm/data/trained_soms/")  
 bmu_dir = os.path.expanduser(f"~/gpm_storm/data/df_with_bmus/{som_name}_with_bmus.parquet")
 figs_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}")
 kde_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}/KDE")
+res_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}/0_Results")
 zarr_directory = "/ltenas2/data/GPM_STORM_DB/zarr"
 
 os.makedirs(figs_dir, exist_ok=True)
 os.makedirs(kde_dir, exist_ok=True)
-
+os.makedirs(res_dir, exist_ok=True)
+    
+    
+# LOAD
+with open(os.path.join(res_dir,"cfad_totals.pkl"), "rb") as f:
+    cfad_totals = pickle.load(f)
+with open(os.path.join(res_dir,"cfad_convs.pkl"), "rb") as f:
+    cfad_convs = pickle.load(f)
+with open(os.path.join(res_dir,"cfad_strats.pkl"), "rb") as f:
+    cfad_strats = pickle.load(f)
+with open(os.path.join(res_dir,"cfad_total_tops.pkl"), "rb") as f:
+    cfad_total_tops = pickle.load(f)
+with open(os.path.join(res_dir,"cfad_others.pkl"), "rb") as f:
+    cfad_others = pickle.load(f)
+with open(os.path.join(res_dir,"wcc_flagss.pkl"), "rb") as f:
+    wcc_flags = pickle.load(f)   
 
 # --- Load ---
 df_bmu = pd.read_parquet(bmu_dir)
@@ -247,7 +270,14 @@ node_characteristics = defaultdict(list)
 for col in df_bmu.columns[:134]:
     plot_mean_variable_per_node(
         arr_df, save_dir=figs_dir, variable=col, fig=True)
+    
+node_dict_path = os.path.join(res_dir, "node_characteristics.pkl")
+with open(node_dict_path, 'wb') as f:
+    pickle.dump(node_characteristics, f)
 
+with open(node_dict_path, 'rb') as f:
+    loaded_dict = pickle.load(f)
+    
 # --- Grouped Analysis ---
 grouped = df_bmu.groupby(['row', 'col'])
 grouped_summary = grouped.mean(numeric_only=True)
@@ -255,9 +285,30 @@ grouped_counts = grouped.size().unstack(fill_value=0)
 
 
 # --- Node Analysis ---
-target_node = (0, 0)
-node_df = df_bmu[(df_bmu["row"] == target_node[0]) & (df_bmu["col"] == target_node[1])]
+target_node = (0,0)
+node_df = df_bmu[(df_bmu["row"] == target_node[0]) & (df_bmu["col"] == target_node[1])].copy()
 print(f"{len(node_df)} events in node {target_node}")
+node_df["time"] = pd.to_datetime(node_df["time"])
+node_df["month"] = node_df["time"].dt.month
+node_df["Season"] = node_df.apply(lambda x: month_to_season(x["month"]), axis=1)
+
+for var in df_bmu.columns[:134]:
+    if var in ["lat", "row", "col"]:
+        continue
+    plt.figure(figsize=(6, 4))
+    try:
+        sns.lmplot(
+            x="lat", y=var, x_bins=np.arange(-90, 100, 10), data=node_df, 
+            scatter=True, lowess=True, hue="Season", ci=95)
+
+        plt.xlabel("Latitude")
+        plt.ylabel(var)
+        plt.title(f"{var} vs Latitude (Smoothed)")
+        plt.tight_layout()
+        plt.show()
+    except Exception as e:
+        print(f"Skipped {var} due to error: {e}")
+        
 
 # --- Spatial Dependency (F-stat) ---
 def compute_spatial_dependency(df):
@@ -319,28 +370,26 @@ for var in df_bmu.columns[:-16]:
     plt.close()
     
     
-#  --- Köppen Zone Mapping ---
+# #  --- Köppen Zone Mapping ---
 
-df_bmu["kg_zone"] = df_bmu.apply(lambda row: lookupCZ(row["lat"], row["lon"]), axis=1)
-zone = "As"
-zone_counts = df_bmu.groupby(["row", "col", "kg_zone"]).size().unstack(fill_value=0)
-zone_map = zone_counts[zone].unstack().fillna(0)
+# df_bmu["kg_zone"] = df_bmu.apply(lambda row: lookupCZ(row["lat"], row["lon"]), axis=1)
+# zone = "As"
+# zone_counts = df_bmu.groupby(["row", "col", "kg_zone"]).size().unstack(fill_value=0)
+# zone_map = zone_counts[zone].unstack().fillna(0)
 
-plt.figure(figsize=(8, 6))
-plt.imshow(zone_map, cmap="viridis", origin="lower")
-plt.colorbar(label=f"Count of zone {zone}")
-plt.title(f"Distribution of Köppen Zone {zone} across SOM nodes")
-plt.xlabel("col")
-plt.ylabel("row")
-plt.show()
+# plt.figure(figsize=(8, 6))
+# plt.imshow(zone_map, cmap="viridis", origin="lower")
+# plt.colorbar(label=f"Count of zone {zone}")
+# plt.title(f"Distribution of Köppen Zone {zone} across SOM nodes")
+# plt.xlabel("col")
+# plt.ylabel("row")
+# plt.show()
 
-fig, ax = plt.subplots(figsize=(15, 8), subplot_kw={"projection": ccrs.PlateCarree()})
-plot_cartopy_background(ax)
-sns.scatterplot(data=df_bmu, x="lon", y="lat", hue="kg_zone", s=10, edgecolor=None, ax=ax)
-ax.legend(title="KG - Zone", bbox_to_anchor=(1.01, 1), loc="upper left")
-plt.show()
-
-
+# fig, ax = plt.subplots(figsize=(15, 8), subplot_kw={"projection": ccrs.PlateCarree()})
+# plot_cartopy_background(ax)
+# sns.scatterplot(data=df_bmu, x="lon", y="lat", hue="kg_zone", s=10, edgecolor=None, ax=ax)
+# ax.legend(title="KG - Zone", bbox_to_anchor=(1.01, 1), loc="upper left")
+# plt.show()
 
 
 # --- Scatterplots vs Latitude ---
@@ -368,72 +417,328 @@ plt.show()
 
 
 
-
-
-
 # --- Houze's Classification ---
-import datetime
-from matplotlib.colors import LogNorm, Normalize
-from xhistogram.xarray import histogram
 
-sample = node_df.iloc[550]
+def classify_houze_categories(sample, zarr_directory):
+    try:
+        _, patch_ds = find_zarr_file_for_patch(sample, zarr_directory)
+    except:
+        return {
+            "ISE": False,
+            "DCC_moderate": False,
+            "DCC_strong": False,
+            "BSR_moderate": False,
+            "BSR_strong": False,
+            "H0":np.nan,
+            "hail_flag_30": False,
+            "hail_flag_40": False,
+            "hail_flag_50": False,
+            "hail_depth_30": np.nan,
+            "hail_depth_40": np.nan,
+            "hail_depth_50": np.nan
+        }
+    h0 = patch_ds["heightZeroDeg"].values.mean()
+    precip_type = patch_ds.gpm.retrieve("flagPrecipitationType", method="major_rain_type")
+    
+    # ISE
+    ise_flag = sample["ETH30_max"] < (h0 - 1000)
 
+    # DCC
+    dcc_moderate_flag = sample["ETH30_max"] > 8000
+    dcc_strong_flag = sample["ETH40_max"] > 10000
+
+    # BSR
+    strat_mask = precip_type == 1  # 1 = stratiform
+    strat_area = strat_mask.values.sum() * 25
+    bsr_moderate = strat_area >= 40000
+    bsr_strong = strat_area >= 50000
+
+    # Hail
+    hail_flag_30 = (sample["ETH30_max"] - h0) > 3000
+    hail_depth_30 = sample["ETH30_max"] - h0
+    hail_flag_40 = (sample["ETH40_max"] - h0) > 3000
+    hail_depth_40 = sample["ETH40_max"] - h0
+    hail_flag_50 = (sample["ETH50_max"] - h0) > 3000
+    hail_depth_50 = sample["ETH50_max"] - h0
+
+    return {
+        "ISE": ise_flag,
+        "DCC_moderate": dcc_moderate_flag,
+        "DCC_strong": dcc_strong_flag,
+        "BSR_moderate": bsr_moderate,
+        "BSR_strong": bsr_strong,
+        "H0": h0,
+        "hail_flag_30": hail_flag_30,
+        "hail_flag_40": hail_flag_40,
+        "hail_flag_50": hail_flag_50,
+        "hail_depth_30": hail_depth_30,
+        "hail_depth_40": hail_depth_40,
+        "hail_depth_50": hail_depth_50
+    }
+
+
+# houze_flags = []
+# for i, sample in tqdm(df_bmu.iterrows()):
+#     flags = classify_houze_categories(sample, zarr_directory)
+#     houze_flags.append(flags)
+# houze_df = pd.DataFrame(houze_flags, index=df_bmu.index)
+
+
+flag_path = os.path.join(res_dir, "houze_flags.parquet")
+# houze_df.to_parquet(flag_path, index=True)
+houze_df = pd.read_parquet(flag_path)
+
+df_bmu = pd.concat([df_bmu, houze_df], axis=1)
+houze_categories = [
+    "ISE", "DCC_moderate", "DCC_strong",
+    "BSR_moderate", "BSR_strong", "hail_flag"
+]
+counts_per_node = (
+    df_bmu
+    .groupby(["row", "col"])[houze_categories]
+    .sum()
+    .astype(int)  # Convert counts to integers
+    .reset_index()
+)
+
+def plot_houze_category_counts_per_node(arr_df, category, save_dir, fig=True):
+    count_values = np.full((10, 10), np.nan)
+
+    for row in range(10):
+        for col in range(10):
+            node_df = df_bmu[(df_bmu["row"] == row) & (df_bmu["col"] == col)]
+            if not node_df.empty and category in node_df.columns:
+                count_val = node_df[category].sum()
+                count_values[row, col] = count_val/len(node_df)
+
+    if fig:
+        plt.figure(figsize=(8, 8))
+        cmap = plt.cm.viridis
+        masked_array = np.ma.masked_invalid(count_values)
+
+        plt.imshow(masked_array, cmap=cmap, origin="upper")
+        cbar = plt.colorbar()
+        cbar.set_label(f"Count of {category}")
+        plt.title(f"Count of {category} per SOM Node")
+        plt.xlabel("SOM Column")
+        plt.ylabel("SOM Row")
+        plt.xticks(np.arange(10))
+        plt.yticks(np.arange(10))
+        plt.grid(False)
+
+        save_path = os.path.join(save_dir, f"som_count_{category}.png")
+        plt.savefig(save_path, dpi=300)
+        plt.close()
+
+    return count_values
+for cat in houze_categories:
+    plot_houze_category_counts_per_node(arr_df, cat, figs_dir
+    )
+
+unique_nodes = df_bmu[["row", "col"]].drop_duplicates()
+node_to_color = {
+    (row, col): i for i, (row, col) in enumerate(unique_nodes.itertuples(index=False))
+}
+num_nodes = len(node_to_color)
+cmap = plt.cm.get_cmap('tab20', num_nodes)
+
+for category in houze_categories:
+    fig, ax = plt.subplots(figsize=(15, 8), subplot_kw={"projection": ccrs.PlateCarree()})
+    plot_cartopy_background(ax)
+    ax.set_title(f"Locations of {category} events")
+    
+    selected = df_bmu[df_bmu[category]]
+    colors = selected[["row", "col"]].apply(lambda x: cmap(node_to_color[(x["row"], x["col"])]), axis=1)
+    scatter = ax.scatter(selected["lon"], selected["lat"],
+        c=colors.tolist(), s=10, alpha=0.5)
+    
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+# ---------------
+
+# # WCC - Wide Convective Core
+# # Contiguous 3-D convective echo objects exceeding either the moderate or strong threshold intensity whose horizontal dimensions (at some altitude) exceed a given threshold.
+# # 	Moderate (30dBZ threshold):horizontal area threshold size is 800 km2 = 32 pixels (each pixel is 5x5 km) 
+# # 	Strong (40dBZ threshold):the area threshold is 1000 km2 = 40 pixels 
+# heights = z_ku.coords["height"].values
+# target_height = sample["ETH30_max"]
+# closest_idx = np.argmin(np.abs(heights - target_height))
+# z_slice = z_ku.isel(height=closest_idx)
+# mask_30dbz = z_slice > 30
+# labels = label(mask_30dbz)
+# sizes = np.bincount(labels.ravel())[1:] 
+# areas_km2 = sizes * 25
+# wcc_moderate = (areas_km2 >= 800).any()
+# wcc_strong = (z_slice > 40).sum().item() * 25 >= 1000
+
+
+df_sa_hail = df_bmu[
+    (df_bmu["lon"] > -81) & 
+    (df_bmu["lon"] < -35) & 
+    (df_bmu["lat"] > -35) & 
+    (df_bmu["lat"] < 12) & 
+    (df_bmu["hail_flag"] == True)
+]
+
+
+# 39620
+# 69140
+# 90169
+# 94429
+
+sample = df_sa_hail.loc[94429]
 _, patch_ds = find_zarr_file_for_patch(sample, zarr_directory)
-patch_ds.gpm.variables
+patch_ds['precipRateNearSurface'].gpm.plot_image()
 
-patch_ds["flagPrecipitationType"] = patch_ds.gpm.retrieve("flagPrecipitationType", method="major_rain_type")
-patch_ds["flagPrecipitationType"].gpm.plot_image()
+import gpm_geo
+satellite="GOES16"
+product="RAD"
+ds_gpm_patch = patch_ds
+ds_gpm_patch["gpm_granule_id"] = xr.ones_like(ds_gpm_patch["gpm_along_track_id"])*ds_gpm_patch["gpm_granule_id"] 
+
+ds_gpm_patch = ds_gpm_patch.compute()
+gpm_geo_fpath = gpm_geo.find_files_matching_acquisitions(satellite=satellite, 
+                                                         product="RAD", 
+                                                         timesteps=ds_gpm_patch.gpm.start_time)[0]
+ds_gpm_geo = gpm_geo.open_products(gpm_geo_fpath, chunks={})
+
+# Align GPM-GEO dataset to GPM patch
+ds_gpm_geo_patch, ds_gpm_patch = gpm_geo.align_datasets(ds_gpm_geo, ds_gpm_patch, cross_track=True)
+
+# Extract coincident GEO imagery
+ds_gpm_geo_image = ds_gpm_geo_patch.gpm_geo.select_collocated_image()
+
+# Put GPM data into memory 
+ds_gpm_patch = ds_gpm_patch.compute()
+ds_gpm_patch = ds_gpm_patch.sel(radar_frequency="Ku")
+ds_gpm_geo_patch.gpm_geo.available_composites_names()
 
 
-# ISE - Isolated Shallow Echoes
-# Echo tops are at least 1 km below the 0°C level and may be thought of as showers of “warm rain.”
-ise_flag = sample["ETH30_max"] < (patch_ds["heightZeroDeg"].values.mean() - 1000)
+geo_composite = "cimss_true_color"
+dummy_variable ="zFactorFinalNearSurface"
+interpolation = "quadric"
 
-# DCC - Deep Convective Cores
-# Contiguous three-dimensional convective echo objects exceeding either the moderate or strong threshold intensity whose tops exceed a height threshold.
-# 	Moderate (30dBZ threshold):top-height threshold is 8 km
-# 	Strong (40dBZ threshold):top-height threshold is 10 km
 
-dcc_moderate_flag = sample["ETH30_max"] >8000
-dcc_strong_flag = sample["ETH40_max"] >10000
+##----------------------------------------------------------.
+#### - Display DPR
+# - Surface reflectivity    
+gpm_geo.plot_composite_and_gpm(
+    ds_rad=ds_gpm_geo_image,
+    ds_gpm=ds_gpm_patch,
+    gpm_variable="zFactorFinalNearSurface",
+    geo_composite=geo_composite,
+    interpolation=interpolation,
+    plot_gpm=True,
+    add_colorbar=True, 
+    visible_colorbar=True,
+)
 
-# WCC - Wide Convective Core
-# Contiguous 3-D convective echo objects exceeding either the moderate or strong threshold intensity whose horizontal dimensions (at some altitude) exceed a given threshold.
-# 	Moderate (30dBZ threshold):horizontal area threshold size is 800 km2 = 32 pixels (each pixel is 5x5 km) 
-# 	Strong (40dBZ threshold):the area threshold is 1000 km2 = 40 pixels 
+gpm_geo.plot_composite_and_gpm(
+    ds_rad=ds_gpm_geo_image,
+    ds_gpm=ds_gpm_patch,
+    gpm_variable="zFactorFinalNearSurface",
+    geo_composite=geo_composite,
+    interpolation=interpolation,
+    plot_gpm=False,
+    add_colorbar=True, 
+    visible_colorbar=True,
+)
 
-heights = z_ku.coords["height"].values
-target_height = sample["ETH30_max"]
+##----------------------------------------------------------.
+ds_gpm_patch
+ds_gpm_geo_patch
+
+##----------------------------------------------------------.
+for i in range(ds_gpm_geo_patch.sizes["geo_acquisition"]):
+    ds_gpm_geo_patch.isel(geo_acquisition=i).gpm_geo.plot("true_color")
+    plt.show()
+    
+    
+ds_gpm_geo_image.gpm_geo.plot("cimss_true_color")
+ds_gpm_patch["zFactorFinalNearSurface"].gpm.plot_image()
+
+
+
+# ------------------------
+
+node_09 = df_bmu[(df_bmu["row"] == 0) & (df_bmu["col"] == 9)]
+node_33 = df_bmu[(df_bmu["row"] == 3) & (df_bmu["col"] == 3)]
+
+
+cfad_totals
+cfad_convs
+cfad_strats
+cfad_total_tops
+cfad_others
+wcc_flags
+
+
+for var in df_bmu.columns:
+    plt.figure(figsize=(6, 3))
+    sns.kdeplot(df_bmu[var], label="All data", linewidth=2)
+    sns.kdeplot(node_09[var], label="Node (0,9)", linewidth=2)
+    sns.kdeplot(node_33[var], label="Node (3,3)", linewidth=2)
+    plt.title(f"Distribution of {var}")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+fig, ax = plt.subplots(figsize=(15, 8), subplot_kw={"projection": ccrs.PlateCarree()})
+plot_cartopy_background(ax)
+sns.scatterplot(data=node_09, x="lon", y="lat", ax=ax, label="node (0,9)")
+sns.scatterplot(data=node_33, x="lon", y="lat", ax=ax, label="node (3,3)")
+sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
+plt.show()
+
+
+def compute_wcc_flags(z_slice):
+    pixel_area_km2=25
+    
+    mask_30dbz = z_slice > 30
+    areas_30 = mask_30dbz.sum().item() * pixel_area_km2
+    wcc_moderate = areas_30 >= 800
+
+    mask_40dbz = z_slice > 40
+    area_strong = mask_40dbz.sum().item() * pixel_area_km2
+    wcc_strong = area_strong >= 1000
+
+    return wcc_moderate, wcc_strong
+
+wcc_flag = []
+sample = node_09.iloc[5]
+
+ds = gpm.open_dataset(
+    product="2A-DPR",
+    product_type="RS",
+    version=7,
+    start_time=sample["time"] - datetime.timedelta(minutes=1),
+    end_time=sample["time"] + datetime.timedelta(minutes=1),
+    scan_mode="FS",
+    chunks={},
+    variables=["zFactorFinal", "height", "typePrecip", "heightZeroDeg"]
+    )
+ds_patch = ds.gpm.sel(gpm_id=slice(sample["gpm_id_start"], sample["gpm_id_end"])).compute()
+ds_patch_footprints = ds_patch.stack(footprints=["cross_track", "along_track"])
+
+
+z_ku = ds_patch_footprints["zFactorFinal"].sel(radar_frequency="Ku")
+height = ds_patch_footprints["height"]
+
+
+heights = height.isel(footprints=0).values
+target_height = np.clip(sample["ETH30_max"], heights.min(), heights.max())
 closest_idx = np.argmin(np.abs(heights - target_height))
-z_slice = z_ku.isel(height=closest_idx)
-mask_30dbz = z_slice > 30
-labels = label(mask_30dbz)
-sizes = np.bincount(labels.ravel())[1:] 
-areas_km2 = sizes * 25
-wcc_moderate = (areas_km2 >= 800).any()
-wcc_strong = (z_slice > 40).sum().item() * 25 >= 1000
+z_slice = z_ku.isel(range=closest_idx)
+z_slice_2d = z_slice.unstack("footprints")
+wcc_moderate, wcc_strong = compute_wcc_flags(z_slice_2d)
 
-
-# BSR - Broad Stratiform Region
-# Contiguous stratiform echo (as designated by the 2A23 product) covering at least 40,000 km2 (moderate threshold) or 50,000 km2 (strong threshold).
-
-precip_type = patch_ds["flagPrecipitationType"]
-strat_mask = precip_type == 1
-strat_area = strat_mask.values.sum() * 25
-bsr_moderate = strat_area >= 40000
-bsr_strong = strat_area >= 50000
-
-# Hail detection
-hail_flag = (sample["ETH30_max"] - patch_ds["heightZeroDeg"].values.mean()) > 3000
-
-
-
-
-
-
-
-
-
-
-
-
+wcc_flag.append({
+    "index": sample.name,
+    "wcc_moderate": wcc_moderate,
+    "wcc_strong": wcc_strong
+})
