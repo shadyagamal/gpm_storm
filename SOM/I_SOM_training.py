@@ -94,6 +94,23 @@ def preprocess_data(df, vars):
     df_scaled = pd.DataFrame(MinMaxScaler().fit_transform(df_log), columns=df_log.columns, index=df_log.index)
     return df_scaled, df.iloc[df_thresh.index]
 
+def preprocess_data_full(df):
+    df_cleaned = df.copy()
+    df_cleaned = df_cleaned.droppna(axis=1)
+            
+    df_selected = df_cleaned[df_cleaned.columns[-9]]
+    df_rounded, _ = bin_and_round_df(df_selected)
+    df_thresh = df_rounded[df_rounded["P_mean"]>=1]
+
+    skewed_cols = df_thresh.apply(skew).pipe(lambda s: s[s > 0.75].index.tolist())
+    df_log = df_thresh.copy()
+    for col in skewed_cols:
+        if (df_log[col] >= 0).all():
+            df_log[col] = np.log1p(df_log[col])
+
+    df_scaled = pd.DataFrame(MinMaxScaler().fit_transform(df_log), columns=df_log.columns, index=df_log.index)
+    return df_scaled, df.iloc[df_thresh.index]
+
 
 def train_som(df_scaled, initial_codebook, n_rows, n_columns, som_name, som_dir, epochs=100):
     # Initialize SOM
@@ -164,11 +181,11 @@ vars_to_use = [
 ]
 
 # --- Preprocessing ---
-som_name = "SOM_Pmean_>_1_with_umap_init"  
+som_name = "SOM_Pmean_>_1_FULL_random"  
 n_rows, n_columns = 10, 10
 n_nodes = n_rows * n_columns
 distance_matrix = precompute_distances(n_rows, n_columns)
-df_scaled, df_original = preprocess_data(df, vars_to_use)
+df_scaled, df_original = preprocess_data_full(df, vars_to_use)
 sample = df_scaled.sample(n=n_nodes, replace=False)
 
 # --- Codebook Initializations ---

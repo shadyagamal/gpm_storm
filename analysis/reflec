@@ -23,7 +23,9 @@ from scipy.ndimage import label
 som_name = "SOM_Pmean_>_1_with_random_init"  
 bmu_dir = os.path.expanduser(f"~/gpm_storm/data/df_with_bmus/{som_name}_with_bmus.parquet")
 figs_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}/CFAD")
+res_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}/results")
 os.makedirs(figs_dir, exist_ok=True)
+os.makedirs(res_dir, exist_ok=True)
 df_bmu = pd.read_parquet(bmu_dir)
 
 actual_combinations = set(zip(df_bmu["row"], df_bmu["col"], strict=False))
@@ -219,23 +221,23 @@ for (row, col), flags_list in wcc_flagss.items():
     
 
 # SAVE
-with open(os.path.join(figs_dir,"cfad_totals.pkl"), "wb") as f:
+with open(os.path.join(res_dir,"cfad_totals.pkl"), "wb") as f:
     pickle.dump(cfad_totals, f)
-with open(os.path.join(figs_dir,"cfad_convs.pkl"), "wb") as f:
+with open(os.path.join(res_dir,"cfad_convs.pkl"), "wb") as f:
     pickle.dump(cfad_convs, f)
-with open(os.path.join(figs_dir,"cfad_strats.pkl"), "wb") as f:
+with open(os.path.join(res_dir,"cfad_strats.pkl"), "wb") as f:
     pickle.dump(cfad_strats, f)
-with open(os.path.join(figs_dir,"cfad_total_tops.pkl"), "wb") as f:
+with open(os.path.join(res_dir,"cfad_total_tops.pkl"), "wb") as f:
     pickle.dump(cfad_total_tops, f)
-with open(os.path.join(figs_dir,"cfad_others.pkl"), "wb") as f:
+with open(os.path.join(res_dir,"cfad_others.pkl"), "wb") as f:
     pickle.dump(cfad_others, f)
-with open(os.path.join(figs_dir,"wcc_flagss.pkl"), "wb") as f:
+with open(os.path.join(res_dir,"wcc_flagss.pkl"), "wb") as f:
     pickle.dump(wcc_flagss, f)
     
     
     
 # LOAD
-with open(os.path.join(figs_dir,"cfad_totals.pkl"), "rb") as f:
+with open(os.path.join(res_dir,"cfad_totals.pkl"), "rb") as f:
     cfad_totals = pickle.load(f)
 # with open(os.path.join(figs_dir,"cfad_convs.pkl"), "rb") as f:
 #     cfad_convs = pickle.load(f)
