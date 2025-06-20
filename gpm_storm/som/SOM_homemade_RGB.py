@@ -349,7 +349,7 @@ def generate_skewed_rgb_dataset(n_samples=1000, red_ratio=0.7):
     n_other = n_samples - n_red
 
     # Red-dominant samples (bright reds)
-    red_samples = np.random.uniform(low=[0.0, 0.0, 0.8], high=[0.2, 0.2, 1], size=(n_red, 3))
+    red_samples = np.random.uniform(low=[0.8, 0.0, 0.0], high=[1, 0.2, 0.2], size=(n_red, 3))
     
     # Other colors (uniformly spread)
     other_samples = np.random.uniform(0, 1, size=(n_other, 3))
@@ -387,11 +387,11 @@ som_shape = (m, k)
 W = np.random.rand(m, k, X_rgb_scaled.shape[1])
 plot_rgb_som(W)
 X = W.reshape(-1, 3)
-W_init, metrics = train_som_with_convergence_old(X, W, distance_matrix, sigma=1.5, eta=1,n_epochs=50)
+W_init, metrics = train_som_with_convergence_old(X_skewed, W, distance_matrix, sigma=1.5, eta=1,n_epochs=50)
 W_init = np.clip(W_init,a_min=0,a_max=1)
 
 
-W_trained, metrics = train_som_with_convergence(X_rgb_scaled, W_init, distance_matrix, sigma=1, eta=0.5,n_epochs=100)
+W_trained, metrics = train_som_with_convergence(X_skewed, W, distance_matrix, sigma=1, eta=0.5,n_epochs=100)
 plot_rgb_som(W_trained)
 
 plt.plot(metrics["bmu_movement"], label="BMU Movement Distance")

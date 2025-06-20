@@ -1,8 +1,3 @@
-r"""
-Train a Self-Organizing Map (SOM) using patch statistics.
-
-@author: shadya
-"""
 import os
 import pandas as pd
 import somoclu
@@ -12,7 +7,7 @@ import itertools
 import numpy as np
 from collections import Counter
 from scipy.stats import skew
-from somperf.metrics import * #type: ignore
+from somperf.metrics import *
 import umap
 from sklearn.cluster import KMeans
 
@@ -185,7 +180,7 @@ som_name = "SOM_Pmean_>_1_FULL_random"
 n_rows, n_columns = 10, 10
 n_nodes = n_rows * n_columns
 distance_matrix = precompute_distances(n_rows, n_columns)
-df_scaled, df_original = preprocess_data_full(df, vars_to_use)
+df_scaled, df_original = preprocess_data(df, vars_to_use)
 sample = df_scaled.sample(n=n_nodes, replace=False)
 
 # --- Codebook Initializations ---
@@ -210,18 +205,6 @@ df_bmu.to_parquet(new_filepath)
 
 
 
-
-# node_positions = [(r, c) for r in range(n_rows) for c in range(n_columns)]
-# X = df_full_scaled.to_numpy()
-# distances = cdist(X, weights_2d, metric="euclidean")
-# bmu_indices = np.argmin(distances, axis=1)
-# bmu_coords = np.array([node_positions[i] for i in bmu_indices])
-# df_full_bmu = df.copy()
-# df_full_bmu["row"] = bmu_coords[:, 0]
-# df_full_bmu["col"] = bmu_coords[:, 1]
-# new_filepath = os.path.expanduser(f"~/gpm_storm/data/df_with_bmus/{som_name}_with_bmus.parquet")
-# df_bmu.to_parquet(new_filepath)
-# # som = load_som(som_dir=som_dir, som_name=som_name)
 
 
 

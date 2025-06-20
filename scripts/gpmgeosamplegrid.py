@@ -1,27 +1,12 @@
 # --- IMPORTS ---
-import itertools
 import os
-import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import random
 import xarray as xr
 import glob
-import gpm
-from gpm.visualization import plot_cartopy_background  # type: ignore
 from gpm_storm.som.experiments import load_som
 from gpm_storm.som.io import create_som_df_array
-import matplotlib.patches as patches
-from collections import defaultdict
-import seaborn as sns
-from sklearn.feature_selection import f_regression
-from kgcpy import *
-import datetime
-from matplotlib.colors import LogNorm, Normalize
-from xhistogram.xarray import histogram
-from tqdm import tqdm
-import pickle 
 import gpm_geo
 
 def find_zarr_file_for_patch(row, zarr_directory, filename_pattern="*.zarr"):
@@ -39,41 +24,6 @@ def find_zarr_file_for_patch(row, zarr_directory, filename_pattern="*.zarr"):
     print(f"No Zarr for granule_id {granule_id} at {time.strftime('%Y-%m')}")
     return None, None
 
-def build_som_sample_array(df, som):
-    arr_df = create_som_df_array(som=som, df=df)
-    arr_ds = np.empty(arr_df.shape, dtype=object)
-
-    for row in range(arr_df.shape[0]):
-        for col in range(arr_df.shape[1]):
-            df_node = arr_df[row, col]
-            if not len(df_node):
-                continue
-            random_indices = np.random.permutation(len(df_node))
-            for i in random_indices:
-                sample = df_node.iloc[i]
-                if sample is not None:
-                    _, patch_ds = find_zarr_file_for_patch(sample, zarr_dir)
-                    ds_gpm_patch = patch_ds
-                    ds_gpm_patch["gpm_granule_id"] = xr.ones_like(ds_gpm_patch["gpm_along_track_id"])*ds_gpm_patch["gpm_granule_id"]
-                    
-                    ds_gpm_patch = ds_gpm_patch.compute()
-                    gpm_geo_fpath = gpm_geo.find_files_matching_acquisitions(satellite=satellite, 
-                                                                             product="RAD", 
-                                                                             timesteps=ds_gpm_patch.gpm.start_time)[0]
-                    ds_gpm_geo = gpm_geo.open_products(gpm_geo_fpath, chunks={})
-                    
-                    # Align GPM-GEO dataset to GPM patch
-                    ds_gpm_geo_patch, ds_gpm_patch = gpm_geo.align_datasets(ds_gpm_geo, ds_gpm_patch, cross_track=False)
-    
-                    # Extract coincident GEO imagery
-                    ds_gpm_geo_image = ds_gpm_geo_patch.gpm_geo.select_collocated_image()
-    
-                    # Put GPM data into memory 
-                    ds_gpm_patch = ds_gpm_patch.compute()
-                    ds_gpm_patch = ds_gpm_patch.sel(radar_frequency="Ku")
-                    arr_ds[row, col] = ds_gpm_patch
-
-    return arr_df, arr_ds
 
 def build_som_sample_array(df, som):
     arr_df = create_som_df_array(som=som, df=df)
@@ -83,6 +33,7 @@ def build_som_sample_array(df, som):
     for row in range(arr_df.shape[0]):
         for col in range(arr_df.shape[1]):
             df_node = arr_df[row, col]
+            print(f"node({row},{col})")
             if not len(df_node):
                 continue
 
@@ -90,6 +41,7 @@ def build_som_sample_array(df, som):
             random_indices = np.random.permutation(len(df_node))
 
             for i in random_indices:
+                print(i)
                 sample = df_node.iloc[i]
 
                 try:
@@ -119,13 +71,13 @@ def build_som_sample_array(df, som):
                         continue  
                     try:
                         ds_gpm_geo_image = ds_gpm_geo_patch.gpm_geo.select_collocated_image()
-                        ds_gpm_geo_image.gpm_geo.plot("cimss_true_color")
                     except Exception:
                         continue 
 
                     arr_ds_gpm_patch[row, col] = ds_gpm_patch
                     arr_ds_gpm_geo_image[row, col] = ds_gpm_geo_image
                     found_valid_patch = True
+                    print("YEAAAAAAAAAAAAAAH")
                     break
 
                 except Exception as e:
@@ -137,7 +89,77 @@ def build_som_sample_array(df, som):
 
     return arr_df, arr_ds_gpm_patch, arr_ds_gpm_geo_image
 
+import warnings
+def build_som_sample_array_better(df, som):
+    arr_df = create_som_df_array(som=som, df=df)
+    arr_ds_gpm_patch = np.empty(arr_df.shape, dtype=object)
+    arr_ds_gpm_geo_image = np.empty(arr_df.shape, dtype=object)
 
+    for row in range(arr_df.shape[0]):
+        for col in range(arr_df.shape[1]):
+            df_node = arr_df[row, col]
+            print(f"node({row},{col})")
+            if not len(df_node):
+                continue
+
+            found_valid_patch = False
+            random_indices = np.random.permutation(len(df_node))
+
+            for i in random_indices:
+                print(i)
+                sample = df_node.iloc[i]
+
+                try:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("error", RuntimeWarning)  # Turn RuntimeWarnings into exceptions
+
+                        # Try loading the GPM patch
+                        _, patch_ds = find_zarr_file_for_patch(sample, zarr_dir)
+                        ds_gpm_patch = patch_ds
+                        ds_gpm_patch["gpm_granule_id"] = xr.ones_like(
+                            ds_gpm_patch["gpm_along_track_id"]
+                        ) * ds_gpm_patch["gpm_granule_id"]
+
+                        ds_gpm_patch = ds_gpm_patch.compute()
+                        ds_gpm_patch = ds_gpm_patch.sel(radar_frequency="Ku")
+
+                        # Try to find and align GEO data
+                        try:
+                            gpm_geo_fpath = gpm_geo.find_files_matching_acquisitions(
+                                satellite=satellite,
+                                product="RAD",
+                                timesteps=ds_gpm_patch.gpm.start_time
+                            )[0]
+                        except IndexError:
+                            continue
+
+                        ds_gpm_geo = gpm_geo.open_products(gpm_geo_fpath, chunks={})
+                        try:
+                            ds_gpm_geo_patch, ds_gpm_patch = gpm_geo.align_datasets(
+                                ds_gpm_geo, ds_gpm_patch, cross_track=False)
+                        except Exception:
+                            continue  
+
+                        try:
+                            ds_gpm_geo_image = ds_gpm_geo_patch.gpm_geo.select_collocated_image()
+                        except Exception:
+                            continue 
+
+                    # Store the result
+                    arr_ds_gpm_patch[row, col] = ds_gpm_patch
+                    arr_ds_gpm_geo_image[row, col] = ds_gpm_geo_image
+                    found_valid_patch = True
+                    print("YEAAAAAAAAAAAAAAH")
+                    break
+
+                except Exception as e:
+                    print(f"Exception caught for patch {i}: {e}")
+                    continue
+
+            if not found_valid_patch:
+                print(f"No valid GEO match found for node ({row}, {col})")
+
+    return arr_df, arr_ds_gpm_patch, arr_ds_gpm_geo_image
 
 
 som_name = "SOM_Pmean_>_1_with_random_init" 
@@ -167,38 +189,28 @@ df_bmu_2020 = df_bmu[
 
 som = load_som(som_dir=som_dir, som_name=som_name)
 arr_df, arr_ds_gpm_patch, arr_ds_gpm_geo_image = build_som_sample_array(df_bmu_2020, som)
-plot_som_grid_samples(arr_ds, save_dir=figs_dir)
+# plot_som_grid_samples(arr_ds, save_dir=figs_dir)
 
 
 for row in range(arr_ds_gpm_geo_image.shape[0]):
     for col in range(arr_ds_gpm_geo_image.shape[1]):
-        df_node = arr_df[row, col]
-        image.gpm_geo.plot("cimss_true_color")
+        image = arr_ds_gpm_geo_image[row][col]
+        image.gpm_geo.plot("true_color")
+        
 
-
-
-sample = df_bmu_2020.iloc[756]
-_, patch_ds = find_zarr_file_for_patch(sample, zarr_dir)
-ds_gpm_patch = patch_ds
-ds_gpm_patch["gpm_granule_id"] = xr.ones_like(ds_gpm_patch["gpm_along_track_id"])*ds_gpm_patch["gpm_granule_id"] 
-
-ds_gpm_patch = ds_gpm_patch.compute()
-gpm_geo_fpath = gpm_geo.find_files_matching_acquisitions(satellite=satellite, 
-                                                         product="RAD", 
-                                                         timesteps=ds_gpm_patch.gpm.start_time)[0]
-ds_gpm_geo = gpm_geo.open_products(gpm_geo_fpath, chunks={})
-
-# Align GPM-GEO dataset to GPM patch
-ds_gpm_geo_patch, ds_gpm_patch = gpm_geo.align_datasets(ds_gpm_geo, ds_gpm_patch, cross_track=True)
-
-# Extract coincident GEO imagery
-ds_gpm_geo_image = ds_gpm_geo_patch.gpm_geo.select_collocated_image()
-
-# Put GPM data into memory 
-ds_gpm_patch = ds_gpm_patch.compute()
-ds_gpm_patch = ds_gpm_patch.sel(radar_frequency="Ku")
-ds_gpm_geo_image.gpm_geo.plot("cimss_true_color")
-
+image = arr_ds_gpm_geo_image[9][8]
+patch = arr_ds_gpm_patch[9][8]
+image.gpm_geo.plot("true_color")
+gpm_geo.plot_composite_and_gpm(
+    ds_rad=image,
+    ds_gpm=patch,
+    gpm_variable="zFactorFinalNearSurface",
+    geo_composite=geo_composite,
+    interpolation=interpolation,
+    plot_gpm=True,
+    add_colorbar=True, 
+    visible_colorbar=True,
+)
 
 # ds_gpm_geo_patch.gpm_geo.available_composites_names()
 # ['24h_microphysics',
@@ -276,6 +288,30 @@ ds_gpm_geo_image.gpm_geo.plot("cimss_true_color")
 #  'true_color_with_night_ir_hires',
 #  'water_vapors1',
 #  'water_vapors2']
+
+
+# sample = df_bmu_2020.iloc[756]
+# _, patch_ds = find_zarr_file_for_patch(sample, zarr_dir)
+# ds_gpm_patch = patch_ds
+# ds_gpm_patch["gpm_granule_id"] = xr.ones_like(ds_gpm_patch["gpm_along_track_id"])*ds_gpm_patch["gpm_granule_id"] 
+
+# ds_gpm_patch = ds_gpm_patch.compute()
+# gpm_geo_fpath = gpm_geo.find_files_matching_acquisitions(satellite=satellite, 
+#                                                          product="RAD", 
+#                                                          timesteps=ds_gpm_patch.gpm.start_time)[0]
+# ds_gpm_geo = gpm_geo.open_products(gpm_geo_fpath, chunks={})
+
+# # Align GPM-GEO dataset to GPM patch
+# ds_gpm_geo_patch, ds_gpm_patch = gpm_geo.align_datasets(ds_gpm_geo, ds_gpm_patch, cross_track=True)
+
+# # Extract coincident GEO imagery
+# ds_gpm_geo_image = ds_gpm_geo_patch.gpm_geo.select_collocated_image()
+
+# # Put GPM data into memory 
+# ds_gpm_patch = ds_gpm_patch.compute()
+# ds_gpm_patch = ds_gpm_patch.sel(radar_frequency="Ku")
+# ds_gpm_geo_image.gpm_geo.plot("cimss_true_color")
+
 ##----------------------------------------------------------.
 #### - Display DPR
 # - Surface reflectivity    
@@ -301,9 +337,6 @@ gpm_geo.plot_composite_and_gpm(
     visible_colorbar=False,
 )
 
-##----------------------------------------------------------.
-ds_gpm_patch
-ds_gpm_geo_patch
 
 ##----------------------------------------------------------.
 for i in range(ds_gpm_geo_patch.sizes["geo_acquisition"]):
@@ -311,11 +344,6 @@ for i in range(ds_gpm_geo_patch.sizes["geo_acquisition"]):
     plt.show()
     
     
-ds_gpm_geo_image.gpm_geo.plot("cimss_true_color")
-
-
-
-
 
 
 
