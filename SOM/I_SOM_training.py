@@ -112,7 +112,7 @@ def train_som(df_scaled, initial_codebook, n_rows, n_columns, som_name, som_dir,
     som = somoclu.Somoclu(
         n_columns=n_columns, n_rows=n_rows,
         initialcodebook=initial_codebook,
-        gridtype="rectangular", maptype="toroid"
+        gridtype="rectangular", maptype="planar"
     )
 
     # Train SOM

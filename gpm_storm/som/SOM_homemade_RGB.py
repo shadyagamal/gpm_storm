@@ -394,23 +394,67 @@ W_init = np.clip(W_init,a_min=0,a_max=1)
 W_trained, metrics = train_som_with_convergence(X_skewed, W, distance_matrix, sigma=1, eta=0.5,n_epochs=100)
 plot_rgb_som(W_trained)
 
-plt.plot(metrics["bmu_movement"], label="BMU Movement Distance")
-plt.plot(metrics["bmu_switches"], label="BMU Switch Count")
-plt.xlabel("Epoch")
-plt.ylabel("Metric Value")
+# Plot Metrics maison
+fig, ax1 = plt.subplots()
+color = 'tab:blue'
+ax1.set_xlabel('Epoch')
+ax1.set_ylabel('BMU Movement Distance', color=color)
+ax1.plot(metrics["bmu_movement"], color=color)
+ax1.tick_params(axis='y', labelcolor=color) 
+ax1.set_yscale("log")
+
+color = 'tab:orange'
+ax2 = ax1.twinx()  
+ax2.set_ylabel('BMU Switch Count', color=color) 
+ax2.plot(metrics["bmu_switches"], color=color)
+ax2.tick_params(axis='y', labelcolor=color)
+ax2.set_yscale("log")
+
 plt.title("SOM Convergence Metrics")
-plt.legend()
 plt.grid(True)
+fig.tight_layout() 
 plt.show()
 
-plt.plot(metrics['quantization_error'], label='QE')
-plt.plot(metrics['topographic_error'], label='TE')
-plt.legend()
+
+fig, ax1 = plt.subplots()
+color = 'tab:blue'
+ax1.set_xlabel('Epoch')
+ax1.set_ylabel('Quantization Error', color=color)
+ax1.plot(metrics['quantization_error'], color=color)
+ax1.tick_params(axis='y', labelcolor=color) 
+
+color = 'tab:orange'
+ax2 = ax1.twinx()  
+ax2.set_ylabel('Topographic Error', color=color) 
+ax2.plot(metrics['topographic_error'], color=color)
+ax2.tick_params(axis='y', labelcolor=color)
+
 plt.title("SOM Quality Metrics")
 plt.grid(True)
+fig.tight_layout() 
 plt.show()
+
+
 
 som = somoclu.Somoclu(m, k, gridtype='rectangular')
 som.train(X_skewed)
 W = som.codebook.reshape((m, k, -1))
 plot_rgb_som(W)
+
+# UMAP
+reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, random_state=42)
+embedding_rgb = reducer.fit_transform(X_rgb_scaled)
+embedding_skewed = reducer.fit_transform(X_skewed)
+
+def plot_embedding(embedding, colors, title):
+    plt.figure(figsize=(8, 6))
+    plt.scatter(embedding[:, 0], embedding[:, 1], c=colors, s=10)
+    plt.title(title)
+    plt.axis('off')
+    plt.show()
+
+# Plot original uniform RGB data
+plot_embedding(embedding_rgb, X_rgb_scaled, title='UMAP Embedding of Random RGB Data')
+
+# Plot skewed RGB data
+plot_embedding(embedding_skewed, X_skewed, title='UMAP Embedding of Skewed RGB Data')

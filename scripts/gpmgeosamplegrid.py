@@ -315,33 +315,33 @@ gpm_geo.plot_composite_and_gpm(
 ##----------------------------------------------------------.
 #### - Display DPR
 # - Surface reflectivity    
-gpm_geo.plot_composite_and_gpm(
-    ds_rad=ds_gpm_geo_image,
-    ds_gpm=ds_gpm_patch,
-    gpm_variable="zFactorFinalNearSurface",
-    geo_composite=geo_composite,
-    interpolation=interpolation,
-    plot_gpm=True,
-    add_colorbar=True, 
-    visible_colorbar=True,
-)
+# gpm_geo.plot_composite_and_gpm(
+#     ds_rad=ds_gpm_geo_image,
+#     ds_gpm=ds_gpm_patch,
+#     gpm_variable="zFactorFinalNearSurface",
+#     geo_composite=geo_composite,
+#     interpolation=interpolation,
+#     plot_gpm=True,
+#     add_colorbar=True, 
+#     visible_colorbar=True,
+# )
 
-gpm_geo.plot_composite_and_gpm(
-    ds_rad=ds_gpm_geo_image,
-    ds_gpm=ds_gpm_patch,
-    gpm_variable="zFactorFinalNearSurface",
-    geo_composite=geo_composite,
-    interpolation=interpolation,
-    plot_gpm=False,
-    add_colorbar=False, 
-    visible_colorbar=False,
-)
+# gpm_geo.plot_composite_and_gpm(
+#     ds_rad=ds_gpm_geo_image,
+#     ds_gpm=ds_gpm_patch,
+#     gpm_variable="zFactorFinalNearSurface",
+#     geo_composite=geo_composite,
+#     interpolation=interpolation,
+#     plot_gpm=False,
+#     add_colorbar=False, 
+#     visible_colorbar=False,
+# )
 
 
-##----------------------------------------------------------.
-for i in range(ds_gpm_geo_patch.sizes["geo_acquisition"]):
-    ds_gpm_geo_patch.isel(geo_acquisition=i).gpm_geo.plot("true_color")
-    plt.show()
+# ##----------------------------------------------------------.
+# for i in range(ds_gpm_geo_patch.sizes["geo_acquisition"]):
+#     ds_gpm_geo_patch.isel(geo_acquisition=i).gpm_geo.plot("true_color")
+#     plt.show()
     
     
 
@@ -349,35 +349,35 @@ for i in range(ds_gpm_geo_patch.sizes["geo_acquisition"]):
 
 
 
-def plot_geo_image_grid(arr_ds, var="gpm_geo_image", cmap=cmap, figsize=(15, 15)):
-    nrows, ncols = arr_ds.shape
-    fig, axes = plt.subplots(nrows, ncols, figsize=figsize)
-    fig.suptitle(f"{var} for each SOM node", fontsize=16)
+# def plot_geo_image_grid(arr_ds, var="gpm_geo_image", cmap=cmap, figsize=(15, 15)):
+#     nrows, ncols = arr_ds.shape
+#     fig, axes = plt.subplots(nrows, ncols, figsize=figsize)
+#     fig.suptitle(f"{var} for each SOM node", fontsize=16)
 
-    for i in range(nrows):
-        for j in range(ncols):
-            ax = axes[i, j]
-            ds_patch = arr_ds[i, j]
+#     for i in range(nrows):
+#         for j in range(ncols):
+#             ax = axes[i, j]
+#             ds_patch = arr_ds[i, j]
 
-            if ds_patch is None or var not in ds_patch:
-                ax.axis("off")
-                continue
+#             if ds_patch is None or var not in ds_patch:
+#                 ax.axis("off")
+#                 continue
 
-            try:
-                img = ds_patch[var].values
-                if img.ndim == 3:
-                    # Assume (channel, y, x) → take visible or first channel
-                    img = img[0]  # Or use np.mean(img, axis=0) for multi-channel
-                ax.imshow(img, cmap=cmap)
-            except Exception as e:
-                ax.text(0.5, 0.5, "Error", ha="center", va="center", fontsize=6)
-                ax.axis("off")
-                continue
+#             try:
+#                 img = ds_patch[var].values
+#                 if img.ndim == 3:
+#                     # Assume (channel, y, x) → take visible or first channel
+#                     img = img[0]  # Or use np.mean(img, axis=0) for multi-channel
+#                 ax.imshow(img, cmap=cmap)
+#             except Exception as e:
+#                 ax.text(0.5, 0.5, "Error", ha="center", va="center", fontsize=6)
+#                 ax.axis("off")
+#                 continue
 
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_title(f"({i},{j})", fontsize=6)
+#             ax.set_xticks([])
+#             ax.set_yticks([])
+#             ax.set_title(f"({i},{j})", fontsize=6)
 
-    plt.tight_layout()
-    plt.subplots_adjust(top=0.95)
-    plt.show()
+#     plt.tight_layout()
+#     plt.subplots_adjust(top=0.95)
+#     plt.show()
