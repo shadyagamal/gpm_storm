@@ -28,6 +28,10 @@ from matplotlib.colors import LogNorm, Normalize
 from xhistogram.xarray import histogram
 from tqdm import tqdm
 import pickle 
+from matplotlib.colors import ListedColormap, LinearSegmentedColormap
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import pycolorbar
+from pycolorbar import get_plot_kwargs
 
 # --- CONSTANTS ---
 SEASON_PALETTE = {
@@ -91,10 +95,6 @@ def build_som_patch_array(df, som, zarr_directory, variable="precipRateNearSurfa
                 arr_ds[row, col] = patch_ds
 
     return arr_df, arr_ds
-
-
-
-
 
 # --- PLOTTING ---
 
@@ -173,9 +173,61 @@ def plot_node_samples_and_maps(arr_df, df, zarr_directory, save_dir, variable="p
                 fig.savefig(os.path.join(save_dir, f"node_{row}_{col}_map.png"))
                 plt.close(fig)
 
+def get_som_colormap(varname: str) -> str:
+    # Precipitation-related variables
+    if varname.startswith("P_") or varname.startswith("MP_"):
+        return "rain_r"
+    # Morphology variables
+    elif varname.startswith(("MA_", "MiA_", "AR_")):
+        return "dense_r"
+    # Reflectivity variables
+    elif varname.startswith(("REFC_", "REFCH_", "ED", "ETH", "LCC_", "ICC_", "CC_")):
+        return "eclipse"
+    # Temperature 
+    elif varname.lower().startswith("temp") or varname.lower().endswith("_temp"):
+        return "sunset"
+    else:
+        return "dense_r"
             
-            
-def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean", high_q=0.99, low_q=0.01, fig=True):
+def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean"):
+    mean_values = np.full((10, 10), np.nan)
+    color = get_som_colormap(variable)
+    cmap = colormaps.get_cmap(color)
+
+    for row in range(10):
+        for col in range(10):
+            df_node = arr_df[row, col]
+            if not df_node.empty:
+                mean_val = df_node[variable].mean()
+                mean_values[row, col] = mean_val
+        
+
+    masked_array = np.ma.masked_invalid(mean_values)
+    fig, ax = plt.subplots(figsize=(8, 8))
+    p = ax.imshow(masked_array, cmap=cmap, origin="upper")
+    
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="7%", pad=0.2)
+    cbar = plt.colorbar(p, cax=cax)
+    cbar.set_label(f"Mean {variable}", fontsize=16)  
+    cbar.ax.tick_params(labelsize=16)  
+    
+    ax.set_title(f"Mean {variable} per SOM Node", fontsize=18)
+    ax.set_xlabel("SOM Column", fontsize=16)
+    ax.set_ylabel("SOM Row", fontsize=16)
+    ax.set_xticks(np.arange(10))
+    ax.set_yticks(np.arange(10))
+    ax.tick_params(axis='both', labelsize=16) 
+    ax.grid(False)
+    plt.tight_layout()
+    
+    mean_path = os.path.join(save_dir, f"som_mean_{variable}.png")
+    plt.savefig(mean_path, dpi=300)
+    plt.close(fig)
+    return None
+
+def compute_dict(arr_df, save_dir, variable="P_mean", high_q=0.99, low_q=0.01):
+    node_characteristics = defaultdict(list)
     mean_values = np.full((10, 10), np.nan)
 
     for row in range(10):
@@ -198,25 +250,11 @@ def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean", high_q=0.99
                 node_characteristics[(row, col)].append(f"high {variable}")
             if val <= low_thresh:
                 node_characteristics[(row, col)].append(f"low {variable}")
-    if fig==True:
-        plt.figure(figsize=(8, 8))
-        cmap = plt.cm.viridis
-        masked_array = np.ma.masked_invalid(mean_values)
-    
-        plt.imshow(masked_array, cmap=cmap, origin="upper")
-        cbar = plt.colorbar()
-        cbar.set_label(f"Mean {variable}")
-        plt.title(f"Mean {variable} per SOM Node")
-        plt.xlabel("SOM Column")
-        plt.ylabel("SOM Row")
-        plt.xticks(np.arange(10))
-        plt.yticks(np.arange(10))
-        plt.grid(False)
-    
-        mean_path = os.path.join(save_dir, f"som_mean_{variable}.png")
-        plt.savefig(mean_path, dpi=300)
-        plt.close(fig)
-    return None
+                
+    node_dict_path = os.path.join(save_dir, "node_characteristics.pkl")
+    with open(node_dict_path, 'wb') as f:
+        pickle.dump(node_characteristics, f)
+    return node_characteristics
 
 
 # --- Config ---
@@ -254,6 +292,8 @@ n_rows = som._n_rows
 n_cols = som._n_columns
 detect_missing_combos(som)
 arr_df, arr_ds = build_som_patch_array(df_bmu, som, zarr_directory)
+colormaps = pycolorbar.colormaps
+colorbars = pycolorbar.colorbars
 
 # --- Plot Grid of Samples ---
 plot_som_grid_samples(arr_ds, save_dir=figs_dir)
@@ -266,14 +306,12 @@ plot_node_samples_and_maps(
 )
 
 # --- Plot Mean Variable per Node ---
-node_characteristics = defaultdict(list)
-for col in df_bmu.columns[:134]:
-    plot_mean_variable_per_node(
-        arr_df, save_dir=figs_dir, variable=col, fig=True)
+num_df = df_bmu.select_dtypes(include='number')
+for col in num_df.columns:
+    plot_mean_variable_per_node(arr_df, save_dir=figs_dir, variable=col)
+    node_characteristics = compute_dict(arr_df, save_dir=figs_dir, variable=col)
     
-node_dict_path = os.path.join(res_dir, "node_characteristics.pkl")
-with open(node_dict_path, 'wb') as f:
-    pickle.dump(node_characteristics, f)
+
 
 with open(node_dict_path, 'rb') as f:
     loaded_dict = pickle.load(f)
@@ -285,12 +323,33 @@ grouped_counts = grouped.size().unstack(fill_value=0)
 
 
 # --- Node Analysis ---
-target_node = (0,0)
+target_node = (0,4)
 node_df = df_bmu[(df_bmu["row"] == target_node[0]) & (df_bmu["col"] == target_node[1])].copy()
 print(f"{len(node_df)} events in node {target_node}")
 node_df["time"] = pd.to_datetime(node_df["time"])
 node_df["month"] = node_df["time"].dt.month
 node_df["Season"] = node_df.apply(lambda x: month_to_season(x["month"]), axis=1)
+
+fig, axes = plt.subplots(nrows=10, ncols=10, figsize=(20, 20), sharex=True)
+bins = np.arange(0, 25, 2)
+for i in range(10):
+    for j in range(10):
+        ax = axes[i, j]
+        node_df = df_bmu[(df_bmu["row"] == i) & (df_bmu["col"] == j)]
+        ax.hist(node_df["sunLocalTime"], bins=bins, edgecolor="black", alpha=0.7)
+        ax.set_title(f"({i},{j})", fontsize=8)
+        ax.tick_params(axis='both', labelsize=6)
+        ax.set_xticks([0, 12, 24])  # fewer ticks for clarity
+        ax.grid(True, axis='y', linestyle='--', alpha=0.3)
+
+# Shared labels
+fig.text(0.5, 0.04, 'Sun Local Time (hours)', ha='center', fontsize=14)
+fig.text(0.06, 0.5, 'Number of Events', va='center', rotation='vertical', fontsize=14)
+fig.suptitle("Diurnal Cycle of Sun Local Time per SOM Node", fontsize=16)
+
+plt.tight_layout(rect=[0.05, 0.05, 1, 0.97])
+plt.show()
+
 
 for var in df_bmu.columns[:134]:
     if var in ["lat", "row", "col"]:
@@ -392,171 +451,9 @@ for var in df_bmu.columns[:-16]:
 # plt.show()
 
 
-# --- Scatterplots vs Latitude ---
-exclude_vars = ["lat", "lon", "row", "col", "season", "kg_zone"]
-plot_vars = [v for v in node_df.columns if v not in exclude_vars]
-
-
-n_rows = (len(plot_vars) + n_cols - 1) // n_cols
-fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 3 * n_rows), sharey=True)
-axes = axes.flatten()
-
-for i, var in enumerate(plot_vars):
-    ax = axes[i]
-    sns.scatterplot(data=node_df, x=var, y="lat", ax=ax, s=10, alpha=0.7)
-    ax.set_title(var)
-
-# Hide unused axes
-for j in range(i + 1, len(axes)):
-    axes[j].axis("off")
-
-plt.tight_layout()
-plt.suptitle(f"Latitude vs Other Variables (Node {target_node[0]}x{target_node[1]})", y=1.02, fontsize=18)
-plt.subplots_adjust(top=0.94)
-plt.show()
 
 
 
-# --- Houze's Classification ---
-
-def classify_houze_categories(sample, zarr_directory):
-    try:
-        _, patch_ds = find_zarr_file_for_patch(sample, zarr_directory)
-    except:
-        return {
-            "ISE": False,
-            "DCC_moderate": False,
-            "DCC_strong": False,
-            "BSR_moderate": False,
-            "BSR_strong": False,
-            "H0":np.nan,
-            "hail_flag_30": False,
-            "hail_flag_40": False,
-            "hail_flag_50": False,
-            "hail_depth_30": np.nan,
-            "hail_depth_40": np.nan,
-            "hail_depth_50": np.nan
-        }
-    h0 = patch_ds["heightZeroDeg"].values.mean()
-    precip_type = patch_ds.gpm.retrieve("flagPrecipitationType", method="major_rain_type")
-    
-    # ISE
-    ise_flag = sample["ETH30_max"] < (h0 - 1000)
-
-    # DCC
-    dcc_moderate_flag = sample["ETH30_max"] > 8000
-    dcc_strong_flag = sample["ETH40_max"] > 10000
-
-    # BSR
-    strat_mask = precip_type == 1  # 1 = stratiform
-    strat_area = strat_mask.values.sum() * 25
-    bsr_moderate = strat_area >= 40000
-    bsr_strong = strat_area >= 50000
-
-    # Hail
-    hail_flag_30 = (sample["ETH30_max"] - h0) > 3000
-    hail_depth_30 = sample["ETH30_max"] - h0
-    hail_flag_40 = (sample["ETH40_max"] - h0) > 3000
-    hail_depth_40 = sample["ETH40_max"] - h0
-    hail_flag_50 = (sample["ETH50_max"] - h0) > 3000
-    hail_depth_50 = sample["ETH50_max"] - h0
-
-    return {
-        "ISE": ise_flag,
-        "DCC_moderate": dcc_moderate_flag,
-        "DCC_strong": dcc_strong_flag,
-        "BSR_moderate": bsr_moderate,
-        "BSR_strong": bsr_strong,
-        "H0": h0,
-        "hail_flag_30": hail_flag_30,
-        "hail_flag_40": hail_flag_40,
-        "hail_flag_50": hail_flag_50,
-        "hail_depth_30": hail_depth_30,
-        "hail_depth_40": hail_depth_40,
-        "hail_depth_50": hail_depth_50
-    }
-
-
-# houze_flags = []
-# for i, sample in tqdm(df_bmu.iterrows()):
-#     flags = classify_houze_categories(sample, zarr_directory)
-#     houze_flags.append(flags)
-# houze_df = pd.DataFrame(houze_flags, index=df_bmu.index)
-
-
-flag_path = os.path.join(res_dir, "houze_flags.parquet")
-# houze_df.to_parquet(flag_path, index=True)
-houze_df = pd.read_parquet(flag_path)
-
-df_bmu = pd.concat([df_bmu, houze_df], axis=1)
-houze_categories = [
-    "ISE", "DCC_moderate", "DCC_strong",
-    "BSR_moderate", "BSR_strong", "hail_flag"
-]
-counts_per_node = (
-    df_bmu
-    .groupby(["row", "col"])[houze_categories]
-    .sum()
-    .astype(int)  # Convert counts to integers
-    .reset_index()
-)
-
-def plot_houze_category_counts_per_node(arr_df, category, save_dir, fig=True):
-    count_values = np.full((10, 10), np.nan)
-
-    for row in range(10):
-        for col in range(10):
-            node_df = df_bmu[(df_bmu["row"] == row) & (df_bmu["col"] == col)]
-            if not node_df.empty and category in node_df.columns:
-                count_val = node_df[category].sum()
-                count_values[row, col] = count_val/len(node_df)
-
-    if fig:
-        plt.figure(figsize=(8, 8))
-        cmap = plt.cm.viridis
-        masked_array = np.ma.masked_invalid(count_values)
-
-        plt.imshow(masked_array, cmap=cmap, origin="upper")
-        cbar = plt.colorbar()
-        cbar.set_label(f"Count of {category}")
-        plt.title(f"Count of {category} per SOM Node")
-        plt.xlabel("SOM Column")
-        plt.ylabel("SOM Row")
-        plt.xticks(np.arange(10))
-        plt.yticks(np.arange(10))
-        plt.grid(False)
-
-        save_path = os.path.join(save_dir, f"som_count_{category}.png")
-        plt.savefig(save_path, dpi=300)
-        plt.close()
-
-    return count_values
-for cat in houze_categories:
-    plot_houze_category_counts_per_node(arr_df, cat, figs_dir
-    )
-
-unique_nodes = df_bmu[["row", "col"]].drop_duplicates()
-node_to_color = {
-    (row, col): i for i, (row, col) in enumerate(unique_nodes.itertuples(index=False))
-}
-num_nodes = len(node_to_color)
-cmap = plt.cm.get_cmap('tab20', num_nodes)
-
-for category in houze_categories:
-    fig, ax = plt.subplots(figsize=(15, 8), subplot_kw={"projection": ccrs.PlateCarree()})
-    plot_cartopy_background(ax)
-    ax.set_title(f"Locations of {category} events")
-    
-    selected = df_bmu[df_bmu[category]]
-    colors = selected[["row", "col"]].apply(lambda x: cmap(node_to_color[(x["row"], x["col"])]), axis=1)
-    scatter = ax.scatter(selected["lon"], selected["lat"],
-        c=colors.tolist(), s=10, alpha=0.5)
-    
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-    ax.grid(True)
-    plt.tight_layout()
-    plt.show()
 
 # ---------------
 
@@ -742,3 +639,17 @@ wcc_flag.append({
     "wcc_moderate": wcc_moderate,
     "wcc_strong": wcc_strong
 })
+
+
+plot_kws, oui = gpm.get_plot_kwargs("typePrecip")
+cmap = plot_kws["cmap"]
+norm = plot_kws.get("norm", Normalize(vmin=0, vmax=1))
+fig, ax = plt.subplots(figsize=(6, 1))
+fig.subplots_adjust(bottom=0.5)
+cb = ColorbarBase(ax, cmap=cmap, norm=norm, orientation='horizontal')
+plt.show()
+
+
+
+
+

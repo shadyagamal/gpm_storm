@@ -198,25 +198,12 @@ for node in actual_combinations:
     cfad_path = os.path.join(figs_dir, f"CFAD_Node{node}.png")
     plt.savefig(cfad_path, dpi=300)
     
-    
-    
-    
     cfad_totals[row,col] = cfad_total
     cfad_convs[row,col] = cfad_conv
     cfad_strats[row,col] = cfad_strat
     cfad_others[row,col] = cfad_other
     cfad_total_tops[row,col] = cfad_total_top
     wcc_flagss[row,col] = wcc_flags
-    
-
-    
-strong_flags = []
-
-for (row, col), flags_list in wcc_flagss.items():
-    for flags in flags_list: 
-        if flags["wcc_moderate"]==True:
-            strong_flags.append((row, col, flags["index"]))
-    
     
     
 
@@ -237,8 +224,8 @@ with open(os.path.join(res_dir,"wcc_flagss.pkl"), "wb") as f:
     
     
 # LOAD
-with open(os.path.join(res_dir,"cfad_totals.pkl"), "rb") as f:
-    cfad_totals = pickle.load(f)
+# with open(os.path.join(res_dir,"cfad_totals.pkl"), "rb") as f:
+#     cfad_totals = pickle.load(f)
 # with open(os.path.join(figs_dir,"cfad_convs.pkl"), "rb") as f:
 #     cfad_convs = pickle.load(f)
 # with open(os.path.join(figs_dir,"cfad_strats.pkl"), "rb") as f:

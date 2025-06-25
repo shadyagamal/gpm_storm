@@ -15,6 +15,7 @@ import umap
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 import joblib
+import seaborn as sns
 
 filepath = "/home/gamal/gpm_storm/data/merged_data_total_0_with_bmus_umap_kmeans.parquet" 
 df = pd.read_parquet(filepath)
@@ -23,10 +24,10 @@ vars_df = df[vars]
 
 # Visualisation ---------------------------------------------------------------
 # Variables frequency 
-stats = ["P_mean", "P_std", "P_center_count", "P_sum",
-         "P_max", "P_count", "MP_sum", "MP_contrib"]
+stats = ["P_mean", "P_sum",
+         "P_max", "P_count"]
 
-fig, axes = plt.subplots(2, 4, figsize=(20, 10))  # 2 rows, 4 columns
+fig, axes = plt.subplots(2, 2, figsize=(20, 10))  # 2 rows, 4 columns
 axes = axes.flatten()
 for i, stat in enumerate(stats):
     sns.histplot(df[stat], bins=100, ax=axes[i], stat="probability")
@@ -36,6 +37,46 @@ for i, stat in enumerate(stats):
     axes[i].set_yscale("log")
 plt.tight_layout()
 plt.show()
+
+
+
+
+
+stats = ["P_mean", "P_sum", "P_max", "P_count"]
+titles = {
+    "P_mean": "Mean Precipitation (mm/h)",
+    "P_sum": "Total Patch Precipitation (mm)",
+    "P_max": "Max Precipitation (mm/h)",
+    "P_count": "Number of Rainy Pixels"
+}
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharex=True)
+
+# Linear y-axis
+sns.histplot(df_scaled["P_mean"], bins=100, ax=axes[0], color="royalblue", stat="probability")
+# axes[0].axvline(1, color="red", linestyle="--", label="1 mm/h threshold")
+axes[0].set_title("P_mean (Linear Y)", fontsize=14)
+axes[0].set_xlabel("Mean Precipitation (mm/h)", fontsize=14)
+axes[0].set_ylabel("Relative Frequency", fontsize=14)
+axes[0].legend()
+
+# Log y-axis
+sns.histplot(df_scaled["P_mean"], bins=100, ax=axes[1], color="royalblue", stat="probability")
+axes[1].set_yscale("log")
+# axes[1].axvline(1, color="red", linestyle="--", label="1 mm/h threshold")
+axes[1].set_title("P_mean (Log Y)", fontsize=14)
+axes[1].set_xlabel("Mean Precipitation (mm/h)", fontsize=14)
+axes[1].legend()
+
+for ax in axes:
+    ax.tick_params(labelsize=10)
+    ax.set_xlim(0, 1)  
+
+plt.suptitle("Distribution of Mean Precipitation (P_mean)", fontsize=16)
+plt.tight_layout(rect=[0, 0, 1, 0.94])
+plt.show()
+
+
 
 # Boxplots
 thresholds = [0, 1, 2, 5, 10, 20, 50, 80, 120]
