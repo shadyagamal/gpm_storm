@@ -81,7 +81,7 @@ with open(os.path.join(res_dir,"cfad_others.pkl"), "rb") as f:
     
     
 ["Total", "Convective", "Stratiform"]
-plot_10x10_cfad(cfad_strats, cfad_dir, precip_type="Stratiform")
+plot_10x10_cfad(cfad_others, cfad_dir, precip_type="Other")
 
 node = (0,0)
 individual_CFAD(cfad_total_tops, node, "Tops")

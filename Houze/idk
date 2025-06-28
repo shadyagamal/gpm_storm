@@ -1,0 +1,38 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Get number of SOM rows and cols (adjust if not 10x10)
+n_rows, n_cols = 10, 10
+
+# Create figure and axes
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 20), sharex=True, sharey=True)
+fig.subplots_adjust(hspace=0.5, wspace=0.3)
+
+houze_categories_mod = ["DCC_moderate", "BSR_moderate"]
+
+houze_categories_strong = ["DCC_strong","BSR_strong"]
+
+# Loop through nodes
+for i in range(n_rows):
+    for j in range(n_cols):
+        ax = axes[i, j]
+        # Get data for this node
+        row_data = counts_per_node[(counts_per_node['row'] == i) & (counts_per_node['col'] == j)]
+        if not row_data.empty:
+            # Get counts and normalize to proportions
+            values = row_data[houze_categories_strong].values[0]
+            total = values.sum()
+            if total > 0:
+                proportions = values / total
+                ax.bar(houze_categories_strong, proportions)
+        ax.set_title(f"{i}-{j}", fontsize=8)
+        ax.tick_params(axis='x', labelrotation=90, labelsize=6)
+        ax.tick_params(axis='y', labelsize=6)
+
+# Labels
+fig.suptitle("Normalized Distribution of Houze Categories in Each SOM Node", fontsize=16)
+fig.supxlabel("Category", fontsize=12)
+fig.supylabel("Proportion", fontsize=12)
+
+plt.tight_layout(rect=[0, 0, 1, 0.97])
+plt.show()

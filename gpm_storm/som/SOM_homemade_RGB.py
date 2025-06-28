@@ -30,37 +30,7 @@ from sklearn.cluster import KMeans
 import umap
 import somoclu
 
-# =========================
-# Data Preprocessing
-# =========================
 
-def preprocess_data(df, features):
-    df_cleaned = df.copy()
-    fill_zero_cols = [
-        "P_GT1_mean", "P_GT1_sum",
-        "MA_LP_GT_0", "MiA_LP_GT_0", "MA_LP_GT_1", "MiA_LP_GT_1",
-        "P_GT2_mean", "P_GT2_sum", "MA_LP_GT_2", "MiA_LP_GT_2",
-        "P_GT5_mean", "P_GT5_sum", "MA_LP_GT_5", "MiA_LP_GT_5",
-        "P_GT10_mean", "P_GT10_sum", "MA_LP_GT_10", "MiA_LP_GT_10",
-        "P_GT20_mean", "P_GT20_sum", "MA_LP_GT_20", "MiA_LP_GT_20",
-        "P_GT50_mean", "P_GT50_sum",
-        "P_GT80_mean", "P_GT80_sum",
-        "P_GT120_mean", "P_GT120_sum",
-        "LCC_30_mean", "LCC_30_std", "ICC_30_mean", "ICC_30_std",
-        "LCC_40_mean", "LCC_40_std", "ICC_40_mean", "ICC_40_std",
-        "LCC_30_max", "ICC_30_max", "LCC_40_max", "ICC_40_max"]
-    
-    for col in fill_zero_cols:
-        if col in df_cleaned.columns:
-            df[col] = df_cleaned[col].fillna(0)
-    df_cleaned = df.dropna(axis=1)
-    scaler = MinMaxScaler()
-    df_scaled = pd.DataFrame(
-        scaler.fit_transform(df_cleaned[df_cleaned.columns[:-9]]),
-        columns=df_cleaned.columns[:-9],
-        index=df_cleaned.index,
-    )
-    return df_scaled
 
 # =========================
 # SOM Utilities
@@ -384,11 +354,11 @@ som_shape = (m, k)
 # # plot_samples(X_rgb_scaled, bmu_locations)
 
 
-W = np.random.rand(m, k, X_rgb_scaled.shape[1])
+W = np.random.rand(m, k, X_skewed.shape[1])
 plot_rgb_som(W)
 X = W.reshape(-1, 3)
-W_init, metrics = train_som_with_convergence_old(X_skewed, W, distance_matrix, sigma=1.5, eta=1,n_epochs=50)
-W_init = np.clip(W_init,a_min=0,a_max=1)
+# W_init, metrics = train_som_with_convergence_old(X_skewed, W, distance_matrix, sigma=1.5, eta=1,n_epochs=50)
+# W_init = np.clip(W_init,a_min=0,a_max=1)
 
 
 W_trained, metrics = train_som_with_convergence(X_skewed, W, distance_matrix, sigma=1, eta=0.5,n_epochs=100)
@@ -436,25 +406,25 @@ plt.show()
 
 
 
-som = somoclu.Somoclu(m, k, gridtype='rectangular')
-som.train(X_skewed)
-W = som.codebook.reshape((m, k, -1))
-plot_rgb_som(W)
+# som = somoclu.Somoclu(m, k, gridtype='rectangular')
+# som.train(X_skewed)
+# W = som.codebook.reshape((m, k, -1))
+# plot_rgb_som(W)
 
-# UMAP
-reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, random_state=42)
-embedding_rgb = reducer.fit_transform(X_rgb_scaled)
-embedding_skewed = reducer.fit_transform(X_skewed)
+# # UMAP
+# reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, random_state=42)
+# embedding_rgb = reducer.fit_transform(X_rgb_scaled)
+# embedding_skewed = reducer.fit_transform(X_skewed)
 
-def plot_embedding(embedding, colors, title):
-    plt.figure(figsize=(8, 6))
-    plt.scatter(embedding[:, 0], embedding[:, 1], c=colors, s=10)
-    plt.title(title)
-    plt.axis('off')
-    plt.show()
+# def plot_embedding(embedding, colors, title):
+#     plt.figure(figsize=(8, 6))
+#     plt.scatter(embedding[:, 0], embedding[:, 1], c=colors, s=10)
+#     plt.title(title)
+#     plt.axis('off')
+#     plt.show()
 
-# Plot original uniform RGB data
-plot_embedding(embedding_rgb, X_rgb_scaled, title='UMAP Embedding of Random RGB Data')
+# # Plot original uniform RGB data
+# plot_embedding(embedding_rgb, X_rgb_scaled, title='UMAP Embedding of Random RGB Data')
 
-# Plot skewed RGB data
-plot_embedding(embedding_skewed, X_skewed, title='UMAP Embedding of Skewed RGB Data')
+# # Plot skewed RGB data
+# plot_embedding(embedding_skewed, X_skewed, title='UMAP Embedding of Skewed RGB Data')

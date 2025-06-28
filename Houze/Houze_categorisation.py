@@ -11,8 +11,13 @@ som_name = "SOM_Pmean_>_1_with_random_init"
 res_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}/0_Results") 
 bmu_dir = os.path.expanduser(f"~/gpm_storm/data/df_with_bmus/{som_name}_with_bmus.parquet")
 zarr_dir = "/ltenas2/data/GPM_STORM_DB/zarr"
-flag_path = os.path.join(res_dir, "houze_flags.parquet")
+flag_path = os.path.join(res_dir, "houze_flags_full.parquet")
 df_bmu = pd.read_parquet(bmu_dir)
+filepath0 = "/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet"
+filepath1 = "/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_1.parquet"
+df0 = pd.read_parquet(filepath0) 
+df1 = pd.read_parquet(filepath1) 
+df = pd.concat([df0,df1], ignore_index=True)
 
 
 # --- Houze's Classification ---
@@ -91,10 +96,10 @@ def classify_houze_categories(sample, zarr_directory):
 
 
 houze_flags = []
-for i, sample in tqdm(df_bmu.iterrows()):
+for i, sample in tqdm(df.iterrows()):
     flags = classify_houze_categories(sample, zarr_dir)
     houze_flags.append(flags)
-houze_df = pd.DataFrame(houze_flags, index=df_bmu.index)
+houze_df = pd.DataFrame(houze_flags, index=df.index)
 
 
 # houze_df.to_parquet(flag_path, index=True)

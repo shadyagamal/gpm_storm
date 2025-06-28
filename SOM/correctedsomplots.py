@@ -1,10 +1,7 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jun 24 11:15:19 2025
+import pycolorbar
+from pycolorbar import get_plot_kwargs  # noqa
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-@author: gamal
-"""
 def get_som_colormap(varname: str) -> str:
     """
     Returns the appropriate colormap for a given SOM variable name.
@@ -30,12 +27,9 @@ def get_som_colormap(varname: str) -> str:
     else:
         return "dense_r"
     
-import pycolorbar
-from pycolorbar import get_plot_kwargs  # noqa
+
 colormaps = pycolorbar.colormaps
 colorbars = pycolorbar.colorbars
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-
 
 for col in num_df.columns:
     variable=col
