@@ -168,9 +168,16 @@ def plot_node_samples_and_maps(arr_df, df, zarr_directory, save_dir, variable="p
                 fig, ax = plt.subplots(figsize=(15, 8), subplot_kw={"projection": ccrs.PlateCarree()})
                 plot_cartopy_background(ax)
                 sns.scatterplot(data=df_subset, x="lon", y="lat", hue="Season", palette=SEASON_PALETTE, ax=ax)
-                ax.set_title(f"Node ({row}, {col}) - Patch Locations by Season")
-                sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
-                fig.savefig(os.path.join(save_dir, f"node_{row}_{col}_map.png"))
+                ax.set_title(f"Node ({row}, {col}) - Patch Locations by Season", fontsize=14)
+                ax.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
+                ax.set_xticks(np.arange(-180, 181, 45), crs=ccrs.PlateCarree())
+                ax.set_yticks(np.arange(-90, 91, 15), crs=ccrs.PlateCarree())
+                ax.tick_params(labelsize=12)
+                sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1), fontsize=12)
+                plt.ylabel(None)
+                plt.xlabel(None)
+                plt.tight_layout()
+                fig.savefig(os.path.join(save_dir, f"node_{row}_{col}_map.png"), dpi=300, bbox_inches="tight")
                 plt.close(fig)
 
 def get_som_colormap(varname: str) -> str:
@@ -311,8 +318,6 @@ for col in num_df.columns:
     plot_mean_variable_per_node(arr_df, save_dir=figs_dir, variable=col)
     node_characteristics = compute_dict(arr_df, save_dir=figs_dir, variable=col)
     
-
-
 with open(node_dict_path, 'rb') as f:
     loaded_dict = pickle.load(f)
     

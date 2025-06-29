@@ -1,0 +1,186 @@
+import rasterio
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.colors import ListedColormap, BoundaryNorm
+import matplotlib.patches as mpatches
+from rasterio.transform import rowcol
+
+# Load the data
+filepath = "/ltenas2/data/GPM_STORM_DB/keop/CHELSA_kg0_1981-2010_V.2.1.tif"
+
+with rasterio.open(filepath) as src:
+    data = src.read(1)
+    nodata = src.nodata
+
+# Mask no-data values
+if nodata is not None:
+    data = np.ma.masked_where(data == nodata, data)
+
+# Full Köppen-Geiger class mapping (code → short name, description)
+kg_classes = {
+    0: ('Af', 'equatorial fully humid'),
+    1: ('Am', 'equatorial monsoonal'),
+    2: ('As', 'equatorial summer dry'),
+    3: ('Aw', 'equatorial winter dry'),
+    4: ('BWk', 'cold desert'),
+    5: ('BWh', 'hot desert'),
+    6: ('BSk', 'cold steppe'),
+    7: ('BSh', 'hot steppe'),
+    8: ('Cfa', 'warm temperate, fully humid, hot summer'),
+    9: ('Cfb', 'warm temperate, fully humid, warm summer'),
+    10: ('Cfc', 'warm temperate, fully humid, cool summer'),
+    11: ('Csa', 'warm temperate, summer dry, hot summer'),
+    12: ('Csb', 'warm temperate, summer dry, warm summer'),
+    13: ('Csc', 'warm temperate, summer dry, cool summer'),
+    14: ('Cwa', 'warm temperate, winter dry, hot summer'),
+    15: ('Cwb', 'warm temperate, winter dry, warm summer'),
+    16: ('Cwc', 'warm temperate, winter dry, cool summer'),
+    17: ('Dfa', 'snow, fully humid, hot summer'),
+    18: ('Dfb', 'snow, fully humid, warm summer'),
+    19: ('Dfc', 'snow, fully humid, cool summer'),
+    20: ('Dfd', 'snow, fully humid, extremely continental'),
+    21: ('Dsa', 'snow, summer dry, hot summer'),
+    22: ('Dsb', 'snow, summer dry, warm summer'),
+    23: ('Dsc', 'snow, summer dry, cool summer'),
+    24: ('Dsd', 'snow, summer dry, extremely continental'),
+    25: ('Dwa', 'snow, winter dry, hot summer'),
+    26: ('Dwb', 'snow, winter dry, warm summer'),
+    27: ('Dwc', 'snow, winter dry, cool summer'),
+    28: ('Dwd', 'snow, winter dry, extremely continental'),
+    29: ('ET', 'polar tundra'),
+    30: ('EF', 'polar frost'),
+}
+
+# Build color map
+n_classes = len(kg_classes)
+colors = plt.cm.tab20b(np.linspace(0, 1, n_classes))  # Or use another qualitative colormap
+cmap = ListedColormap(colors)
+bounds = np.arange(-0.5, n_classes + 0.5, 1)
+norm = BoundaryNorm(bounds, cmap.N)
+
+# Plot the classification
+plt.figure(figsize=(14, 7))
+im = plt.imshow(data, cmap=cmap, norm=norm)
+plt.title("Köppen-Geiger Climate Classification (CHELSA V2.1)")
+plt.axis('off')
+
+# Create a custom legend
+patches = [
+    mpatches.Patch(color=cmap(i), label=f"{code:02d} {abbr} – {desc}")
+    for i, (code, (abbr, desc)) in enumerate(kg_classes.items())
+]
+
+# Optional: show legend outside or below the map
+plt.legend(
+    handles=patches,
+    bbox_to_anchor=(1.05, 1),
+    loc='upper left',
+    borderaxespad=0.,
+    fontsize=8,
+    title="Climate Zones"
+)
+
+plt.tight_layout()
+plt.show()
+
+
+
+kg_class_to_group = {
+    0: 'A', 1: 'A', 2: 'A', 3: 'A',     # Tropical
+    4: 'B', 5: 'B', 6: 'B', 7: 'B',     # Arid
+    8: 'C', 9: 'C', 10: 'C', 11: 'C', 12: 'C', 13: 'C', 14: 'C', 15: 'C', 16: 'C',  # Temperate
+    17: 'D', 18: 'D', 19: 'D', 20: 'D', 21: 'D', 22: 'D', 23: 'D', 24: 'D', 25: 'D', 26: 'D', 27: 'D', 28: 'D',  # Cold
+    29: 'E', 30: 'E'                    # Polar
+}
+
+group_names = {
+    'A': 'Tropical',
+    'B': 'Arid',
+    'C': 'Temperate',
+    'D': 'Cold',
+    'E': 'Polar',
+}
+
+# Assign numeric ID to each group for plotting
+group_to_id = {g: i for i, g in enumerate(group_names.keys())}
+id_to_group = {v: g for g, v in group_to_id.items()}
+
+# Load and map the tif data
+filepath = "/ltenas2/data/GPM_STORM_DB/keop/CHELSA_kg0_1981-2010_V.2.1.tif"
+with rasterio.open(filepath) as src:
+    data = src.read(1)
+    nodata = src.nodata
+
+# Mask and map to groups
+if nodata is not None:
+    data = np.ma.masked_where(data == nodata, data)
+
+# Map full class code to group ID
+mapped_data = np.vectorize(lambda x: group_to_id[kg_class_to_group.get(x, 'E')])(data)
+
+# Define color map
+colors = ['green', 'sandybrown', 'yellowgreen', 'lightblue', 'white']  # A, B, C, D, E
+cmap = ListedColormap(colors)
+bounds = np.arange(-0.5, len(colors)+0.5)
+norm = BoundaryNorm(bounds, cmap.N)
+
+# Plot
+plt.figure(figsize=(12, 6))
+plt.imshow(mapped_data, cmap=cmap, norm=norm)
+plt.title("Simplified Köppen-Geiger Climate Groups")
+plt.axis('off')
+
+# Legend
+patches = [
+    mpatches.Patch(color=colors[i], label=f"{id_to_group[i]} – {group_names[id_to_group[i]]}")
+    for i in range(len(group_names))
+]
+plt.legend(
+    handles=patches,
+    bbox_to_anchor=(1.05, 1),
+    loc='upper left',
+    title="Climate Group"
+)
+
+plt.tight_layout()
+plt.show()
+
+
+kg_filepath = "/ltenas2/data/GPM_STORM_DB/keop/CHELSA_kg0_1981-2010_V.2.1.tif"
+with rasterio.open(kg_filepath) as kg_src:
+    kg_data = kg_src.read(1)
+    transform = kg_src.transform
+
+# Class-to-group mapping
+kg_class_to_group = {
+    1: 'A', 2: 'A', 3: 'A', 4: 'A',
+    5: 'B', 6: 'B', 7: 'B', 8: 'B',
+    9: 'C', 10: 'C', 11: 'C', 12: 'C', 13: 'C', 14: 'C',
+    15: 'C', 16: 'C', 17: 'C',
+    18: 'D', 19: 'D', 20: 'D', 21: 'D',
+    22: 'D', 23: 'D', 24: 'D', 25: 'D',
+    26: 'D', 27: 'D', 28: 'D', 29: 'D',
+    30: 'E', 31: 'E'
+}
+
+# Initialize output lists
+full_classes = []
+group_classes = []
+
+# Loop through each sample in df_bmu
+for lat, lon in zip(df_bmu['lat'], df_bmu['lon']):
+    try:
+        row, col = rowcol(transform, lon, lat)
+        kg_class = kg_data[row, col]
+        full_classes.append(kg_class)
+        group_classes.append(kg_class_to_group.get(kg_class, 'Unknown'))
+    except Exception:
+        full_classes.append(None)
+        group_classes.append(None)
+
+# Add to DataFrame
+df_bmu["kg_class"] = full_classes
+df_bmu["kg_group"] = group_classes
+
+
+
