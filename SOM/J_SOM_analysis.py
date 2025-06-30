@@ -32,6 +32,7 @@ from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import pycolorbar
 from pycolorbar import get_plot_kwargs
+import re
 
 # --- CONSTANTS ---
 SEASON_PALETTE = {
@@ -169,9 +170,9 @@ def plot_node_samples_and_maps(arr_df, df, zarr_directory, save_dir, variable="p
                 plot_cartopy_background(ax)
                 sns.scatterplot(data=df_subset, x="lon", y="lat", hue="Season", palette=SEASON_PALETTE, ax=ax)
                 ax.set_title(f"Node ({row}, {col}) - Patch Locations by Season", fontsize=14)
-                ax.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
+                ax.set_extent([-180, 180, -60, 60], crs=ccrs.PlateCarree())
                 ax.set_xticks(np.arange(-180, 181, 45), crs=ccrs.PlateCarree())
-                ax.set_yticks(np.arange(-90, 91, 15), crs=ccrs.PlateCarree())
+                ax.set_yticks(np.arange(-60, 61, 15), crs=ccrs.PlateCarree())
                 ax.tick_params(labelsize=12)
                 sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1), fontsize=12)
                 plt.ylabel(None)
@@ -196,7 +197,7 @@ def get_som_colormap(varname: str) -> str:
     else:
         return "dense_r"
             
-def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean"):
+def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean", unit=None):
     mean_values = np.full((10, 10), np.nan)
     color = get_som_colormap(variable)
     cmap = colormaps.get_cmap(color)
@@ -216,7 +217,7 @@ def plot_mean_variable_per_node(arr_df, save_dir, variable="P_mean"):
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="7%", pad=0.2)
     cbar = plt.colorbar(p, cax=cax)
-    cbar.set_label(f"Mean {variable}", fontsize=16)  
+    cbar.set_label(f"Mean {variable} {unit}", fontsize=16)  
     cbar.ax.tick_params(labelsize=16)  
     
     ax.set_title(f"Mean {variable} per SOM Node", fontsize=18)
@@ -262,6 +263,42 @@ def compute_dict(arr_df, save_dir, variable="P_mean", high_q=0.99, low_q=0.01):
     with open(node_dict_path, 'wb') as f:
         pickle.dump(node_characteristics, f)
     return node_characteristics
+
+def get_unit(variable: str) -> str:
+    if re.match(r"P_(mean|std|max|sum)", variable):
+        return "[mm/h]"
+    elif re.match(r"P_centre_count|P_count|P_GT_\d+_count", variable):
+        return "[# pixels]"
+    elif re.match(r"P_GT_\d+_regions", variable):
+        return "[# regions]"
+    elif re.match(r"P_GT_\d+_(mean|sum|min)", variable):
+        return "[mm/h]"
+    elif re.match(r"P_%_\d+_\d+", variable):
+        return "[%]"
+    elif variable == "MP_sum":
+        return "[mm/h]"
+    elif variable == "MP_contrib":
+        return "[%]"
+    elif re.match(r"MA_LP_GT_\d+", variable) or re.match(r"MiA_LP_GT_\d+", variable):
+        return "[# pixels]"
+    elif re.match(r"AR_LP_GT_\d+", variable):
+        return "[-]"
+    elif re.match(r"REFC_(mean|std|max)", variable):
+        return "[dBZ]"
+    elif re.match(r"REFCH_(mean|std|max)", variable):
+        return "[km]"
+    elif re.match(r"ED_\d+_(solid|full)", variable) or re.match(r"ETH_\d+", variable):
+        return "[km]"
+    elif re.match(r"FRAC_", variable):
+        return "[-]"
+    elif variable == "Air_temp":
+        return "[K]"
+    elif re.match(r"CC_\d+_count", variable):
+        return "[# cores]"
+    elif re.match(r"(LCC|ICC)_\d+_(mean|max|std)", variable):
+        return "[dBZ]"
+    else:
+        return ""
 
 
 # --- Config ---
@@ -315,9 +352,12 @@ plot_node_samples_and_maps(
 # --- Plot Mean Variable per Node ---
 num_df = df_bmu.select_dtypes(include='number')
 for col in num_df.columns:
-    plot_mean_variable_per_node(arr_df, save_dir=figs_dir, variable=col)
+    unit = get_unit(col)
+    plot_mean_variable_per_node(arr_df, save_dir=figs_dir, variable=col, unit=unit)
     node_characteristics = compute_dict(arr_df, save_dir=figs_dir, variable=col)
-    
+
+plot_mean_variable_per_node(arr_df, save_dir=figs_dir, variable="REFC_max", unit="[dBZ]")
+
 with open(node_dict_path, 'rb') as f:
     loaded_dict = pickle.load(f)
     

@@ -104,7 +104,7 @@ som_name = "SOM_Pmean_>_1_with_random_init"
 som_dir = os.path.expanduser("~/gpm_storm/data/trained_soms/")  
 res_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}/0_Results") 
 bmu_dir = os.path.expanduser(f"~/gpm_storm/data/df_with_bmus/{som_name}_with_bmus.parquet")
-figs_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}")
+figs_dir = os.path.expanduser(f"~/gpm_storm/figs/{som_name}/Houze")
 zarr_dir = "/ltenas2/data/GPM_STORM_DB/zarr"
 flag_path = os.path.join(res_dir, "houze_flags.parquet")
 df_bmu = pd.read_parquet(bmu_dir)
@@ -169,8 +169,8 @@ cmap = LinearSegmentedColormap.from_list("white_blue_yellow_red", colors, N=256)
 
 
 # Binned maps
-lat_bins = np.arange(-90, 91, 1.5)  
-lon_bins = np.arange(-180, 181, 1.5)  
+lat_bins = np.arange(-66, 66, 2)  
+lon_bins = np.arange(-180, 181, 2)  
 df_bmu["lat_bin"] = np.digitize(df_bmu["lat"], bins=lat_bins) - 1
 df_bmu["lon_bin"] = np.digitize(df_bmu["lon"], bins=lon_bins) - 1
 agg_df = df_bmu.groupby(["season","lat_bin", "lon_bin"])[houze_categories].sum(numeric_only=True).reset_index()
@@ -180,25 +180,30 @@ agg_df["lon"] = lon_bins[agg_df["lon_bin"]]
 for var in houze_categories:
     for s in seasons:
         heatmap = np.full((len(lat_bins)-1, len(lon_bins)-1), np.nan) 
-        agg_df_season = agg_df[agg_df["season"]==s]
+        agg_df_season = agg_df
+
         for _, row in agg_df_season.iterrows():
-            lat_idx = np.searchsorted(lat_bins, row["lat"], side="right") - 1
-            lon_idx = np.searchsorted(lon_bins, row["lon"], side="right") - 1
+            lat_idx = row["lat_bin"]
+            lon_idx = row["lon_bin"]
             if 0 <= lat_idx < heatmap.shape[0] and 0 <= lon_idx < heatmap.shape[1]:
                 heatmap[lat_idx, lon_idx] = row[var]
-    
+
         fig, ax = plt.subplots(figsize=(13, 5), subplot_kw={"projection": ccrs.PlateCarree()})
-        ax.set_extent([-180, 180, -70, 70], crs=ccrs.PlateCarree())
+        ax.set_extent([-180, 180, -60, 60], crs=ccrs.PlateCarree())
         ax.add_feature(cfeature.COASTLINE, linewidth=0.8)
         ax.add_feature(cfeature.BORDERS, linestyle=":")
-        mesh = ax.pcolormesh(lon_bins, lat_bins, heatmap, cmap=cmap, transform=ccrs.PlateCarree())
-        cbar = plt.colorbar(mesh, ax=ax, orientation="vertical", pad=0.02, shrink=1)
-        cbar.set_label(f"{var}")
-        ax.set_title(f"(c) {var} (moderate thresholds)", fontsize=12)
+
+        mesh = ax.pcolormesh(lon_bins, lat_bins, heatmap, cmap=cmap,
+                             transform=ccrs.PlateCarree())
+
+        cbar = fig.colorbar(mesh, ax=ax, orientation="vertical", pad=0.02, shrink=0.73)
+        cbar.set_label(f"{var}", fontsize=11)
+        cbar.ax.tick_params(labelsize=10)
+
+        ax.set_title(f"Global Distribution of {var} (2°x2° bins)", fontsize=13)
         ax.set_xticks(np.arange(-180, 181, 45), crs=ccrs.PlateCarree())
-        ax.set_yticks(np.arange(-75, 76, 15), crs=ccrs.PlateCarree())
+        ax.set_yticks(np.arange(-60, 61, 15), crs=ccrs.PlateCarree())
         ax.tick_params(labelsize=10)
-        plt.title(f"Global Distribution of {var} (2°x2° bins) {s}")
         plt.tight_layout()
         plt.show()
     
@@ -213,11 +218,12 @@ for cat in houze_categories:
 
 
 def plot_2x2_houze_seasonal_map(mod_category, strong_category, agg_df, lat_bins, lon_bins, save_dir=None):
-    fig, axes = plt.subplots(2, 2, figsize=(16, 10),
+    fig, axes = plt.subplots(2, 2, figsize=(16, 7),
                              subplot_kw={"projection": ccrs.PlateCarree()},
                              sharex=True, sharey=True)
     cmap = LinearSegmentedColormap.from_list("white_blue_yellow_red", colors, N=256)
-
+    vmin = agg_df[[mod_category, strong_category]].min().min()
+    vmax = agg_df[[mod_category, strong_category]].max().max()
     last_mesh = None  # Keep track of the last mesh to pass to colorbar
 
     for i, (cat, label) in enumerate(zip([mod_category, strong_category], ["Moderate", "Strong"])):
@@ -232,14 +238,14 @@ def plot_2x2_houze_seasonal_map(mod_category, strong_category, agg_df, lat_bins,
                     heatmap[lat_idx, lon_idx] = row[cat]
 
             ax = axes[i, j]
-            ax.set_extent([-180, 180, -70, 70], crs=ccrs.PlateCarree())
+            ax.set_extent([-180, 180, -65, 66], crs=ccrs.PlateCarree())
             ax.add_feature(cfeature.COASTLINE, linewidth=0.6)
             ax.add_feature(cfeature.BORDERS, linestyle=":", linewidth=0.4)
-            ax.set_xticks(np.arange(-180, 181, 60), crs=ccrs.PlateCarree())
-            ax.set_yticks(np.arange(-75, 76, 15), crs=ccrs.PlateCarree())
+            ax.set_xticks(np.arange(-180, 181, 45), crs=ccrs.PlateCarree())
+            ax.set_yticks(np.arange(-60, 61, 15), crs=ccrs.PlateCarree())
             ax.tick_params(labelsize=12)
             mesh = ax.pcolormesh(lon_bins, lat_bins, heatmap, cmap=cmap,
-                                 transform=ccrs.PlateCarree(), shading='auto')
+                     transform=ccrs.PlateCarree(), shading='auto')
             ax.set_title(f"{label} {cat.split('_')[0].upper()} ({season})", fontsize=16)
 
             last_mesh = mesh  # Save for colorbar
@@ -259,10 +265,12 @@ def plot_2x2_houze_seasonal_map(mod_category, strong_category, agg_df, lat_bins,
 
     if save_dir:
         save_path = os.path.join(save_dir, f"2x2_map_{mod_category.split('_')[0].lower()}.png")
-        plt.savefig(save_path, dpi=300)
-    plt.show()
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    # plt.show()
+
 
 
 
 plot_2x2_houze_seasonal_map("wcc_moderate", "wcc_strong", agg_df, lat_bins, lon_bins, save_dir=figs_dir)
-
+plot_2x2_houze_seasonal_map("DCC_moderate", "DCC_strong", agg_df, lat_bins, lon_bins, save_dir=figs_dir)
+plot_2x2_houze_seasonal_map("BSR_moderate", "BSR_strong", agg_df, lat_bins, lon_bins, save_dir=figs_dir)
