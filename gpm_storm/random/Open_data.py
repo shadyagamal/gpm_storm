@@ -177,7 +177,7 @@ parquet_dir ="/ltenas2/data/GPM_STORM_DB/parquet"
 output_dir = "/ltenas2/data/GPM_STORM_DB/merged"
 zarr_dir = "/ltenas2/data/GPM_STORM_DB/zarr"
 
-concatenate_parquet_files_arrow(parquet_dir, output_dir)
+# concatenate_parquet_files_arrow(parquet_dir, output_dir)
 #concatenated_df = concatenate_parquet_files(parquet_dir)
 
 df = pd.read_parquet("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_0.parquet")
@@ -209,6 +209,12 @@ df1 = pd.read_parquet("/ltenas2/data/GPM_STORM_DB/merged/merged_data_total_1.par
 #         bad_indicess.append(i)
     
 patch_row = df.iloc[8297]
+zarr_path, zarr_patch = find_zarr_file_for_patch(patch_row, zarr_dir)
+zarr_patch['precipRateNearSurface'].gpm.plot_image()
+zarr_patch['label_image'].gpm.plot_image()
+
+
+patch_row = df.iloc[2]
 zarr_path, zarr_patch = find_zarr_file_for_patch(patch_row, zarr_dir)
 zarr_patch['precipRateNearSurface'].gpm.plot_image()
 zarr_patch['label_image'].gpm.plot_image()

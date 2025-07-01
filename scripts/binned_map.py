@@ -87,14 +87,14 @@ for var in variables:
             heatmap[lat_idx, lon_idx] = row[var]
 
     fig, ax = plt.subplots(figsize=(13, 5), subplot_kw={"projection": ccrs.PlateCarree()})
-    ax.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
+    ax.set_extent([-180, 180, -65, 65], crs=ccrs.PlateCarree())
     ax.add_feature(cfeature.COASTLINE, linewidth=0.8)
     ax.add_feature(cfeature.BORDERS, linestyle=":")
     mesh = ax.pcolormesh(lon_bins, lat_bins, heatmap, cmap=cmap, transform=ccrs.PlateCarree())
-    cbar = plt.colorbar(mesh, ax=ax, orientation="vertical", pad=0.02, shrink=1)
+    cbar = plt.colorbar(mesh, ax=ax, orientation="vertical", pad=0.02, shrink=0.79)
     cbar.set_label(f"{var}")
     ax.set_xticks(np.arange(-180, 181, 45), crs=ccrs.PlateCarree())
-    ax.set_yticks(np.arange(-90, 91, 15), crs=ccrs.PlateCarree())
+    ax.set_yticks(np.arange(-60, 61, 15), crs=ccrs.PlateCarree())
     ax.tick_params(labelsize=10)
     plt.title(f"Global Distribution of {var} ({degree}°x{degree}° bins)")
     
