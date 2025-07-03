@@ -20,32 +20,32 @@ if kg_nodata is not None:
 
 # === Köppen-Geiger class mapping ===
 kg_classes = {
-    0: ('Af', 'equatorial fully humid'),    1: ('Am', 'equatorial monsoonal'),
-    2: ('As', 'equatorial summer dry'),     3: ('Aw', 'equatorial winter dry'),
-    4: ('BWk', 'cold desert'),              5: ('BWh', 'hot desert'),
-    6: ('BSk', 'cold steppe'),              7: ('BSh', 'hot steppe'),
-    8: ('Cfa', 'humid subtropical'),        9: ('Cfb', 'marine west coast'),
-    10: ('Cfc', 'subpolar oceanic'),        11: ('Csa', 'hot-summer Mediterranean'),
-    12: ('Csb', 'warm-summer Mediterranean'), 13: ('Csc', 'cold-summer Mediterranean'),
-    14: ('Cwa', 'dry-winter humid subtropical'), 15: ('Cwb', 'dry-winter subtropical highland'),
-    16: ('Cwc', 'subtropical highland'),    17: ('Dfa', 'humid continental, hot summer'),
-    18: ('Dfb', 'humid continental, warm summer'), 19: ('Dfc', 'subarctic'),
-    20: ('Dfd', 'extremely continental subarctic'), 21: ('Dsa', 'Mediterranean, hot summer'),
-    22: ('Dsb', 'Mediterranean, warm summer'), 23: ('Dsc', 'Mediterranean, cold summer'),
-    24: ('Dsd', 'Mediterranean, extremely continental'), 25: ('Dwa', 'dry-winter, hot summer'),
-    26: ('Dwb', 'dry-winter, warm summer'), 27: ('Dwc', 'dry-winter, cold summer'),
-    28: ('Dwd', 'dry-winter, extremely continental'), 29: ('ET', 'tundra'),
-    30: ('EF', 'frost')
+    1: ('Af', 'equatorial fully humid'),    2: ('Am', 'equatorial monsoonal'),
+    3: ('As', 'equatorial summer dry'),     4: ('Aw', 'equatorial winter dry'),
+    5: ('BWk', 'cold desert'),              6: ('BWh', 'hot desert'),
+    7: ('BSk', 'cold steppe'),              8: ('BSh', 'hot steppe'),
+    9: ('Cfa', 'humid subtropical'),        10: ('Cfb', 'marine west coast'),
+    11: ('Cfc', 'subpolar oceanic'),        12: ('Csa', 'hot-summer Mediterranean'),
+    13: ('Csb', 'warm-summer Mediterranean'), 14: ('Csc', 'cold-summer Mediterranean'),
+    15: ('Cwa', 'dry-winter humid subtropical'), 16: ('Cwb', 'dry-winter subtropical highland'),
+    17: ('Cwc', 'subtropical highland'),    18: ('Dfa', 'humid continental, hot summer'),
+    19: ('Dfb', 'humid continental, warm summer'), 20: ('Dfc', 'subarctic'),
+    21: ('Dfd', 'extremely continental subarctic'), 22: ('Dsa', 'Mediterranean, hot summer'),
+    23: ('Dsb', 'Mediterranean, warm summer'), 24: ('Dsc', 'Mediterranean, cold summer'),
+    25: ('Dsd', 'Mediterranean, extremely continental'), 26: ('Dwa', 'dry-winter, hot summer'),
+    27: ('Dwb', 'dry-winter, warm summer'), 28: ('Dwc', 'dry-winter, cold summer'),
+    29: ('Dwd', 'dry-winter, extremely continental'), 30: ('ET', 'tundra'),
+    31: ('EF', 'frost')
 }
 kg_code_to_abbr = {k: abbr for k, (abbr, _) in kg_classes.items()}
 
 # === Grouping of classes ===
 kg_class_to_group = {
-    **{k: 'A' for k in [0, 1, 2, 3]},
-    **{k: 'B' for k in [4, 5, 6, 7]},
-    **{k: 'C' for k in range(8, 17)},
-    **{k: 'D' for k in range(17, 29)},
-    29: 'E', 30: 'E'
+    **{k: 'A' for k in [1, 2, 3,4]},
+    **{k: 'B' for k in [5, 6, 7,8]},
+    **{k: 'C' for k in range(9, 18)},
+    **{k: 'D' for k in range(18, 30)},
+    30: 'E', 31: 'E'
 }
 group_names = {
     'A': 'Tropical', 'B': 'Arid', 'C': 'Temperate',
@@ -55,19 +55,120 @@ group_to_id = {g: i for i, g in enumerate(group_names)}
 id_to_group = {v: k for k, v in group_to_id.items()}
 
 # === Custom color mapping ===
-# custom_colors = {
-#     "NA": "#ffffff",  
-#     "EF": "#6395fe", "ET": "#63fcfc",
-#     "Dwd": "#6a23ae", "Dwc": "#8858b0", "Dwb": "#987cb1", "Dwa": "#cab5fe",
-#     "Dsd": "#c8c9c9", "Dsc": "#e3c6f8", "Dsb": "#fbb4fc", "Dsa": "#fa6bfa",
-#     "Dfd": "#c81488", "Dfc": "#c800c8", "Dfb": "#630163", "Dfa": "#320232",
-#     "Cwc": "#996633", "Cwb": "#956603", "Cwa": "#b46400",
-#     "Csc": "#c9fd00", "Csb": "#93fc00", "Csa": "#00fa00",
-#     "Cfc": "#007700", "Cfb": "#014e01", "Cfa": "#002f00",
-#     "BSk": "#cca753", "BSh": "#cc8b13", "BWk": "#ffff65", "BWh": "#fece00",
-#     "Aw": "#fdcdcd", "As": "#fa9797", "Am": "#fb0000", "Af": "#920202"
-# }
-s
+custom_colors = {
+    "NA": "#ffffff",  # No data, white
+
+    # Polar climates (E) - Blues
+    "EF": "#6395fe",  # dark blue
+    "ET": "#63fcfc",  # sky blue
+
+    # Dry climates (B) - Sandy/Desert tones (orange to brown)
+    "BSk": "#cca753",
+    "BSh": "#cc8b13",
+    "BWk": "#ffff65",
+    "BWh": "#fece00",
+
+    # Temperate climates (C) 
+    # Mediterranean - Green
+    "Csa": "#f57c00",  # deep orange
+    "Csb": "#fb8c00",  # vivid orange
+    "Csc": "#ffb74d",  # light orange
+
+    # Marine/subtropical - Yellow-green
+    "Cfa": "#007f7f",  # fresh green
+    "Cfb": "#339f9f",  # mid green
+    "Cfc": "#99d9d9",  # forest green
+
+    # Highland/dry-winter - Browns
+    "Cwa": "#c19a6b",  # light brown
+    "Cwb": "#9e7951",  # chestnut
+    "Cwc": "#7a5b3a",  # deep brown
+
+    # Continental climates (D)
+    # Humid continental - Magentas
+    "Dfa": "#e57eb4",  # magenta
+    "Dfb": "#cf5a9b",  # deep pink
+    "Dfc": "#b03c83",  # violet
+    "Dfd": "#84235e",  # plum
+
+    # Dry-winter - Purple
+    "Dwa": "#b39ddb",  # lavender
+    "Dwb": "#9575cd",  # soft purple
+    "Dwc": "#7e57c2",  # mid purple
+    "Dwd": "#5e35b1",  # royal purple
+
+    # Mediterranean continental - Pinks
+    "Dsa": "#f4a6b6",  # soft pink
+    "Dsb": "#ed6d92",  # medium pink
+    "Dsc": "#c7446c",  # deep pink
+    "Dsd": "#a1274d",  # burgundy
+
+    # Tropical climates (A) - Teals and Greens
+   "Af": "#33691e",  # Tropical rainforest — deep forest green
+    "Am": "#689f38",  # Tropical monsoon — rich mid green
+    "Aw": "#8bc34a",  # Tropical savanna — strong deep green
+    "As": "#b6f118",  # Tropical dry savanna — lighter green-teal for contrast
+}
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.colors import ListedColormap, BoundaryNorm
+import numpy as np
+
+n_classes = len(kg_classes)
+colors_list = []
+for i in range(1, n_classes + 1):
+    abbr = kg_classes[i][0]
+    color = custom_colors.get(abbr)
+    if color is None:
+        print(f"Missing color for {abbr} at index {i}")
+        color = "#ffffff"
+    colors_list.append(color)
+
+cmap = ListedColormap(colors_list)
+norm = BoundaryNorm(np.arange(0.5, n_classes + 1.5), n_classes)
+
+# Main figure without legend
+plt.figure(figsize=(14, 7))
+im = plt.imshow(kg_data, cmap=cmap, norm=norm)
+plt.title("Köppen-Geiger Climate Classification (CHELSA V2.1)")
+plt.axis('off')
+plt.tight_layout()
+plt.show()
+
+# Separate legend figure with 2 columns
+patches = [
+    mpatches.Patch(color=custom_colors[abbr], label=f"{code:02d} {abbr} – {desc}")
+    for code, (abbr, desc) in kg_classes.items()
+]
+
+fig_legend = plt.figure(figsize=(6, len(patches)//2 * 0.5))  # height depends on number of patches
+plt.legend(handles=patches, loc='center', fontsize=8, title="Climate Zones", ncol=2)
+plt.axis('off')
+plt.tight_layout()
+plt.show()
+
+# === Plot full Köppen-Geiger map ===
+def plot_full_kg(data):
+    n_classes = len(kg_classes)
+    cmap = ListedColormap([custom_colors.get(kg_classes[i][0], "#ffffff") for i in range(1,n_classes+1)])
+    norm = BoundaryNorm(np.arange(-0.5, n_classes + 0.5), n_classes)
+
+    plt.figure(figsize=(14, 7))
+    im = plt.imshow(data, cmap=cmap, norm=norm)
+    plt.title("Köppen-Geiger Climate Classification (CHELSA V2.1)")
+    plt.axis('off')
+
+    patches = [
+        mpatches.Patch(color=custom_colors[abbr], label=f"{code:02d} {abbr} – {desc}")
+        for code, (abbr, desc) in kg_classes.items()
+    ]
+    plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc='upper left',
+               borderaxespad=0., fontsize=8, title="Climate Zones")
+    plt.tight_layout()
+    plt.show()
+
+plot_full_kg(kg_data)
 
 # === Simplified Köppen groups map ===
 def plot_grouped_kg(data):

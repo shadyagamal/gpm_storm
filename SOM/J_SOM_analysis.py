@@ -368,15 +368,16 @@ grouped_counts = grouped.size().unstack(fill_value=0)
 
 
 # --- Node Analysis ---
-target_node = (0,4)
+target_node = (0,3)
 node_df = df_bmu[(df_bmu["row"] == target_node[0]) & (df_bmu["col"] == target_node[1])].copy()
 print(f"{len(node_df)} events in node {target_node}")
 node_df["time"] = pd.to_datetime(node_df["time"])
 node_df["month"] = node_df["time"].dt.month
 node_df["Season"] = node_df.apply(lambda x: month_to_season(x["month"]), axis=1)
 
+# ------ Diurnal cycle 
 fig, axes = plt.subplots(nrows=10, ncols=10, figsize=(20, 20), sharex=True)
-bins = np.arange(0, 25, 2)
+bins = np.arange(0, 25, 4)
 for i in range(10):
     for j in range(10):
         ax = axes[i, j]
@@ -395,7 +396,7 @@ fig.suptitle("Diurnal Cycle of Sun Local Time per SOM Node", fontsize=16)
 plt.tight_layout(rect=[0.05, 0.05, 1, 0.97])
 plt.show()
 
-
+# --------------------------------
 for var in df_bmu.columns[:134]:
     if var in ["lat", "row", "col"]:
         continue

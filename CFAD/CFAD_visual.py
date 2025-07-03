@@ -10,10 +10,10 @@ import pickle
 def plot_10x10_cfad(cfads, cfad_path, precip_type):
     nrows, ncols = 10, 10 
     figsize = (15, 15)
-    reflectivity_ticks = np.arange(30, 70, 10)
-    relative_height_ticks = np.arange(-7000, 10000, 3000)
+    reflectivity_ticks = np.arange(20, 70, 10)
+    relative_height_ticks = np.arange(-4000, 4001, 2000)
     zmin, zmax = 10, 60
-    hmin, hmax = -7000, 10000
+    hmin, hmax = -5000, 5000
     
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize, sharex=True, sharey=True)
     for row, col in actual_combinations:
@@ -81,7 +81,7 @@ with open(os.path.join(res_dir,"cfad_others.pkl"), "rb") as f:
     
     
 ["Total", "Convective", "Stratiform"]
-plot_10x10_cfad(cfad_others, cfad_dir, precip_type="Other")
+plot_10x10_cfad(cfad_total_tops, cfad_dir, precip_type="Tops")
 
-node = (0,0)
-individual_CFAD(cfad_total_tops, node, "Tops")
+# node = (0,0)
+# individual_CFAD(cfad_total_tops, node, "Tops")
